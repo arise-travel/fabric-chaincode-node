@@ -348,7 +348,7 @@
             "reviewCategory": "docs"
         },
         {
-            "packageName": "fabric-shim",
+            "packageName": "@arise-travel/fabric-shim",
             "projectFolder": "libraries/fabric-shim",
             "reviewCategory": "libraries",
             "shouldPublish": true
