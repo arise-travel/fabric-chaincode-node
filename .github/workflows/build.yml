@@ -21,6 +21,6 @@ jobs:
       - run: rush setup
       - run: rush install --no-link
       - run: rush link
-      - run: rush publish --publish
+      - run: rush publish  --include-all  --publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.ACTIONS_PAT }}
