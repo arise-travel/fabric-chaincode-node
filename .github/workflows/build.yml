@@ -19,5 +19,8 @@ jobs:
           scope: '@arise-travel'
       - run: npm install -g @microsoft/rush
       - run: rush setup
-      - run: rush install
-      - run: rush build -o fabric-shim
+      - run: rush install --no-link
+      - run: rush link
+      - run: rush publish --publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ACTIONS_PAT }}
