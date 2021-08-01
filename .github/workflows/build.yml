@@ -18,6 +18,7 @@ jobs:
           # Defaults to the user or organization that owns the workflow file
           scope: '@arise-travel'
       - run: npm install -g @microsoft/rush
+      - run: rush update
       - run: rush install --no-link
       - run: rush link
       - run: rush publish  --include-all  --publish
