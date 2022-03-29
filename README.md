@@ -1,7 +1,3 @@
-# Edit: 3/29/2022 - This fork exists because we needed to remove a validation check that was blocking compositeKeys from being used in the `getStateByRangeWithPagination` query function.  See: https://github.com/arise-travel/fabric-chaincode-node/commit/03d00e0263611470e679828bd6a57bb3f54737bd
-
-Hopefully in the future there will be a better solution and we don't need to rely on a fork to make this work.
-
 # Hyperledger Fabric - Node.js Contracts
 
 [![Build Status](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_apis/build/status/Fabric-Chaincode-Node?branchName=main)](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_build/latest?definitionId=33&branchName=main)
@@ -9,7 +5,7 @@ Hopefully in the future there will be a better solution and we don't need to rel
 [![fabric-shim npm module](https://img.shields.io/npm/v/fabric-shim?label=fabric-shim)](https://www.npmjs.com/package/fabric-shim)
 [![fabric-shim-api npm module](https://img.shields.io/npm/v/fabric-shim?label=fabric-shim-api)](https://www.npmjs.com/package/fabric-shim-api)
 [![fabric-shim-crypto npm module](https://img.shields.io/npm/v/fabric-shim?label=fabric-shim-crypto)](https://www.npmjs.com/package/fabric-shim-crypto)
-[![Rocket.Chat](https://chat.hyperledger.org/images/join-chat.svg)](https://chat.hyperledger.org/channel/fabric-chaincode-dev)
+[![Discord](https://img.shields.io/discord/905194001349627914?label=discord)](https://discordapp.com/channels/905194001349627914/943090527920877598)
 
 This is the project to support the writing of Contracts with the node.js runtime.
 

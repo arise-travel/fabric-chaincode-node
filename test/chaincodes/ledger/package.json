@@ -11,12 +11,12 @@
   "main": "index.js",
   "engine-strict": true,
   "engineStrict": true,
-  "version": "1.0.0",
+  "version": "2.4.1",
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@arise-travel/fabric-shim": "2.3.1",
-    "fabric-contract-api": "2.3.1-unstable",
-    "fabric-ledger": "2.3.1-unstable"
+    "fabric-shim": "2.4.1",
+    "fabric-contract-api": "2.4.1",
+    "fabric-ledger": "2.4.1"
   }
 }

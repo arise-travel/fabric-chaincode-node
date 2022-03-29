@@ -9,13 +9,12 @@
 
 const fs = require('fs');
 const git = require('git-rev-sync');
-const { series } = require('gulp');
 const path = require('path');
 const util = require('util');
 
 const { shell: runcmds } = require('toolchain');
 
-const version = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'))).version;
+const version = JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'))).version;
 const node_version = process.env.NODE_VERSION || '12.16.1';
 const build_dir = path.join(__dirname);
 const tag = version + '-' + git.short();
@@ -41,4 +40,12 @@ const imageClean = async () => {
     ]);
 };
 
-exports.default = series(imageClean, imageBuild);
+const main = async()=>{
+    await imageClean();
+    await imageBuild();
+}
+
+main().catch((e)=>{
+    console.error(e);
+    process.exit(1);
+})
