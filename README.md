@@ -1,3 +1,7 @@
+# Edit: 3/29/2022 - This fork exists because we needed to remove a validation check that was blocking compositeKeys from being used in the `getStateByRangeWithPagination` query function.  See: https://github.com/arise-travel/fabric-chaincode-node/commit/03d00e0263611470e679828bd6a57bb3f54737bd
+
+Hopefully in the future there will be a better solution and we don't need to rely on a fork to make this work.
+
 # Hyperledger Fabric - Node.js Contracts
 
 [![Build Status](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_apis/build/status/Fabric-Chaincode-Node?branchName=main)](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_build/latest?definitionId=33&branchName=main)
