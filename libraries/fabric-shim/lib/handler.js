@@ -369,7 +369,8 @@ class ChaincodeMessageHandler {
 
         stream.on('end', function () {
             logger.debug('Chat stream ending');
-            stream.cancel();
+            logger.info('Chat stream ending');
+            // stream.cancel();
         });
 
         stream.on('error', function (err) {
