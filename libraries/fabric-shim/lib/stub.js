@@ -550,7 +550,7 @@ class ChaincodeStub {
             startKey = EMPTY_KEY_SUBSTITUTE;
         }
         try {
-            validateSimpleKeys(startKey, endKey);
+            // validateSimpleKeys(startKey, endKey);
         } catch (err) {
             return Promise.reject(err);
         }

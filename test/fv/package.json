@@ -27,7 +27,7 @@
     "delay": "4.3.0",
     "eslint": "^6.6.0",
     "fabric-contract-api": "2.3.1-unstable",
-    "@arise-travel/fabric-shim": "2.3.4",
+    "@arise-travel/fabric-shim": "2.3.5",
     "fabric-shim-api": "2.3.1-unstable",
     "fabric-shim-crypto": "2.3.1-unstable",
     "fs-extra": "^9.0.1",
