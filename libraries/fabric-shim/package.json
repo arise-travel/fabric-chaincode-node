@@ -1,6 +1,6 @@
 {
   "name": "@arise-travel/fabric-shim",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "description": "A node.js implementation of Hyperledger Fabric chaincode shim, to allow endorsing peers and user-provided chaincodes to communicate with each other",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/arise-travel"
