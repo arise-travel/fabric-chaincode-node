@@ -381,6 +381,22 @@ class ChaincodeMessageHandler {
         // now let's kick off the conversation already!
         logger.debug('Sending chat message: %j', convStarterMsg);
         stream.write(convStarterMsg);
+
+        // wait 1 minute to get a response from the peer
+        let flag = 0;
+        const waitForPeerResponse = setInterval(function () {
+            flag++;
+            if (state === STATES.Established) {
+                clearInterval(waitForPeerResponse);
+            } else {
+                logger.debug('Connection with peer not established, resending starter message');
+                stream.write(convStarterMsg);
+            }
+            if(flag === 6) {
+                logger.error('Can\'t establish a connection with peer');
+                clearInterval(waitForPeerResponse);
+            }
+        }, 10000);
     }
 
     handleInit(msg) {
