@@ -1,4 +1,4 @@
-name: Node.js Package
+name: Nodejs Package
 on:
   release:
     types: [created]
@@ -19,8 +19,5 @@ jobs:
           scope: '@arise-travel'
       - run: npm install -g @microsoft/rush
       - run: rush setup
-      - run: rush install --no-link
-      - run: rush link
-      - run: rush publish  --include-all  --publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.ACTIONS_PAT }}
+      - run: rush install
+      - run: rush build -o fabric-shim .

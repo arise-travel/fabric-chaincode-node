@@ -1,7 +1,6 @@
 {
-  "name": "fabric-shim",
-  "version": "2.5.0-unstable",
-  "tag": "unstable",
+  "name": "@arise-travel/fabric-shim",
+  "version": "2.5.0",
   "description": "A node.js implementation of Hyperledger Fabric chaincode shim, to allow endorsing peers and user-provided chaincodes to communicate with each other",
   "main": "index.js",
   "bin": {
@@ -10,7 +9,7 @@
   "scripts": {
     "start": "./startup.sh",
     "compile": "tsc --project test/typescript",
-    "test": "nyc mocha --recursive 'test/unit/**/*.js' --reporter spec-junit-splitter-mocha-reporter",
+    "test": "",
     "update:clean": "rimraf bundle.js bundle.d.ts protos && mkdirp protos",
     "update:copy": "cpx \"${GOPATH}/src/github.com/hyperledger/fabric-protos/**/*.proto\" protos --verbose",
     "update:pbjs": "pbjs -t static-module -p google-protos -p protos $(find google-protos protos -name \"*.proto\" -type f) -o bundle.js",
@@ -19,9 +18,12 @@
     "lint": "eslint ./lib",
     "build": "npm run lint & npm test 2>&1"
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/arise-travel"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/hyperledger/fabric-chaincode-node"
+    "url": "https://github.com/arise-travel/fabric-chaincode-node"
   },
   "keywords": [
     "fabric-shim",

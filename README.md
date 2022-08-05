@@ -1,4 +1,11 @@
-# Hyperledger Fabric - Node.js Contracts
+# Hyperledger Fabric - Node.js Contracts - Arise Fork
+
+## Reasons this fork exists:
+1. CLI grpc arguments not being passed when running chaincode as a server
+Related to https://github.com/hyperledger/fabric-chaincode-node/issues/318
+
+2. Range query restrictions on composite keys (HLF justified this somehow):
+See https://github.com/arise-travel/fabric-chaincode-node/commit/03d00e0263611470e679828bd6a57bb3f54737bd
 
 [![Build Status](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_apis/build/status/Fabric-Chaincode-Node?branchName=main)](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_build/latest?definitionId=33&branchName=main)
 [![fabric-contract-api npm module](https://img.shields.io/npm/v/fabric-shim?label=fabric-contract-api)](https://www.npmjs.com/package/fabric-contract-api)

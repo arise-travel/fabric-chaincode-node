@@ -329,13 +329,13 @@
             "packageName": "fabric-shim-api",
             "projectFolder": "apis/fabric-shim-api",
             "reviewCategory": "apis",
-            "shouldPublish": true
+            "shouldPublish": false
         },
         {
             "packageName": "fabric-contract-api",
             "projectFolder": "apis/fabric-contract-api",
             "reviewCategory": "apis",
-            "shouldPublish": true
+            "shouldPublish": false
         },
         {
             "packageName": "fabric-nodeenv",
@@ -351,13 +351,13 @@
             "packageName": "fabric-shim",
             "projectFolder": "libraries/fabric-shim",
             "reviewCategory": "libraries",
-            "shouldPublish": true
+            "shouldPublish": false
         },
         {
             "packageName": "fabric-ledger",
             "projectFolder": "libraries/fabric-ledger",
             "reviewCategory": "libraries",
-            "shouldPublish": true
+            "shouldPublish": false
         },
         {
             "packageName": "toolchain",
