@@ -86,8 +86,8 @@ class ChaincodeFromContract {
     _compileSchemas() {
 
         const schemaList = [];
-        for (const name in this.metadata.components.schemas) {
-            const s = this.metadata.components.schemas[name];
+        for (const name in  this.metadata.components.schemas) {
+            const s =  this.metadata.components.schemas[name];
 
             schemaList.push(s);
         }
@@ -154,6 +154,7 @@ class ChaincodeFromContract {
         logger.debug('Supplied contract classes', contractClasses);
         this.defaultContractName = Reflect.getMetadata('fabric:default', global);
 
+
         const implementations = {};
 
         for (const contractClass of contractClasses) {
@@ -182,11 +183,12 @@ class ChaincodeFromContract {
     _augmentMetadataFromCode(metadata) {
 
         if (!metadata.$schema) {
-            metadata.$schema = 'https://hyperledger.github.io/fabric-chaincode-node/main/api/contract-schema.json';
+            metadata.$schema = 'https://hyperledger.github.io/fabric-chaincode-node/release-2.1/api/contract-schema.json';
         }
 
         if (!metadata.contracts || Object.keys(metadata.contracts).length === 0) {
             logger.debug('_augmentMetadataFromCode - Contracts not supplied. Generating default');
+
             const skipNames = Object.getOwnPropertyNames(Contract.prototype);
 
             metadata.contracts = JSON.parse(JSON.stringify(this.contractImplementations));
@@ -316,7 +318,7 @@ class ChaincodeFromContract {
      * The invokeFunctionality function is called for all the invoke operations; init is also redirected to here
      *
      * @param {ChaincodeStub} stub Stub class giving the full api
-     * @param {Object} fAndP Function and Paramters obtained from the smart contract argument
+	 * @param {Object} fAndP Function and Paramters obtained from the smart contract argument
      */
     async invokeFunctionality(stub) {
         const bufferArgs = stub.getBufferArgs();
@@ -335,7 +337,6 @@ class ChaincodeFromContract {
             const {contractName: cn, function: fn} = this._splitFunctionName(fAndP);
             logger.debug(`${loggerPrefix} Invoking ${cn} ${fn}`);
 
-
             const contractData = this.contractImplementations[cn];
             if (!contractData) {
                 throw new Error(`Contract name is not known: ${cn}`);
@@ -351,8 +352,8 @@ class ChaincodeFromContract {
             ctx.setChaincodeStub(stub);
             ctx.setClientIdentity(new ClientIdentity(stub));
             ctx.logging = {
-                setLevel: Logger.setLevel,
-                getLogger: (name) => {
+                setLevel : Logger.setLevel,
+                getLogger : (name) => {
                     return Logger.getLogger(name ? `${cn}:${name}` : cn);
                 }
             };
@@ -364,7 +365,7 @@ class ChaincodeFromContract {
 
             // if the function exists, then we can call it otherwise, call the unkownn tx handler
             if (functionExists) {
-                logger.debug(`${JSON.stringify(functionExists)}`);
+
                 // marhsall the parameters into the correct types for hanlding by
                 // the tx function
                 const parameters = dataMarshall.handleParameters(functionExists, txArgs, loggerPrefix);
@@ -372,8 +373,9 @@ class ChaincodeFromContract {
                 // before tx
                 await contractInstance.beforeTransaction(ctx);
 
-                // around tx
-                const result = await contractInstance.aroundTransaction(ctx, fn, parameters);
+                // use the spread operator to make this pass the arguments seperately not as an array
+                // this is the point at which control is handed to the tx function
+                const result = await contractInstance[fn](ctx, ...parameters);
 
                 // after tx fn, assuming that the smart contract hasn't gone wrong
                 await contractInstance.afterTransaction(ctx, result);
@@ -383,7 +385,7 @@ class ChaincodeFromContract {
                 if (functionExists.returns) {
                     returnSchema = functionExists.returns;
                 }
-                logger.debug(`${JSON.stringify(result)},${returnSchema.schema}`);
+
                 // returnSchema can be undefined if there is no return value - the datamarshall can handle that
                 // return the data value, if any to the shim. Including converting the result to the wire format
                 return shim.success(dataMarshall.toWireBuffer(result, returnSchema.schema, loggerPrefix));
@@ -393,25 +395,25 @@ class ChaincodeFromContract {
                     await contractInstance.unknownTransaction(ctx);
                     return shim.success();
                 } catch (error) {
-                    return shim.error(error.message);
+                    return shim.error(error);
                 }
             }
 
         } catch (error) {
             // log the error and then fail the transaction
-            logger.error(`${loggerPrefix} ${error}`);
-            return shim.error(error.message);
+            logger.error(`${loggerPrefix} ${error.toString()}`);
+            return shim.error(error);
         }
     }
 
     /**
-     * Parse the fcn name to be name and function.  These are separated by a :
-     * Anything after the : is treated as the function name
-     * No : implies that the whole string is a function name
-     *
-     * @param {String} fcn the combined function and name string
-     * @return {Object} split into name and string
-     */
+	 * Parse the fcn name to be name and function.  These are separated by a :
+	 * Anything after the : is treated as the function name
+	 * No : implies that the whole string is a function name
+	 *
+	 * @param {String} fcn the combined function and name string
+	 * @return {Object} split into name and string
+	 */
     _splitFunctionName(fcn) {
         // Did consider using a split(':') call to do this; however I chose regular expression for
         // the reason that it provides definitive description.

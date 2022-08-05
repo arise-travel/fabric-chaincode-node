@@ -1,0 +1,60 @@
+{
+    "name": "fabric-shim-crypto",
+    "version": "2.2.4-unstable",
+    "tag": "unstable",
+    "description": "A node.js implementation of encryption library for Hyperledger Fabric chaincode shim",
+    "main": "index.js",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/hyperledger/fabric-chaincode-node"
+    },
+    "scripts": {
+        "test": "nyc mocha --recursive 'test/**/*.js' --reporter spec-junit-splitter-mocha-reporter 2>&1",
+        "lint":"eslint ./lib/",
+        "build": "npm run lint && npm test"
+    },
+    "keywords": [
+        "fabric-shim",
+        "fabric-shim-crypto",
+        "Hyperledger Fabric",
+        "Fabric Shim"
+    ],
+    "engines": {
+        "node": "^12.16.1",
+        "npm": "^6.4.1"
+    },
+    "license": "Apache-2.0",
+    "dependencies": {
+        "elliptic": "^6.5.3",
+        "jsrsasign": "^10.2"
+    },
+    "devDependencies": {
+        "mocha": "6.2.2",
+        "eslint": "6.6.0",
+        "nyc": "14.1.1",
+        "typescript": "3.0.1",
+        "chai": "^4.1.1",
+        "chai-as-promised": "^7.1.1",
+        "rewire": "4.0.1",
+        "sinon": "7.5.0",
+        "chai-things": "^0.2.0",
+        "spec-junit-splitter-mocha-reporter": "1.0.1"
+    },
+    "nyc": {
+        "exclude": [
+            "coverage/**",
+            "test/**"
+        ],
+        "reporter": [
+            "text-summary",
+            "cobertura",
+            "html"
+        ],
+        "all": true,
+        "check-coverage": true,
+        "statements": 100,
+        "branches": 100,
+        "functions": 100,
+        "lines": 100
+    }
+}

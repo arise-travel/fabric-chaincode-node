@@ -1,19 +1,13 @@
-# Hyperledger Fabric - Node.js Contracts - Arise Fork
+# Hyperledger Fabric - Node.js Contracts
 
-## Reasons this fork exists:
-1. CLI grpc arguments not being passed when running chaincode as a server
-Related to https://github.com/hyperledger/fabric-chaincode-node/issues/318
-
-2. Range query restrictions on composite keys (HLF justified this somehow):
-See https://github.com/arise-travel/fabric-chaincode-node/commit/03d00e0263611470e679828bd6a57bb3f54737bd
-
-[![Build Status](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_apis/build/status/Fabric-Chaincode-Node?branchName=main)](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_build/latest?definitionId=33&branchName=main)
+[![Build Status](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_apis/build/status/Fabric-Chaincode-Node?branchName=master)](https://dev.azure.com/Hyperledger/Fabric-Chaincode-Node/_build/latest?definitionId=33&branchName=master)
 [![fabric-contract-api npm module](https://img.shields.io/npm/v/fabric-shim?label=fabric-contract-api)](https://www.npmjs.com/package/fabric-contract-api)
 [![fabric-shim npm module](https://img.shields.io/npm/v/fabric-shim?label=fabric-shim)](https://www.npmjs.com/package/fabric-shim)
 [![fabric-shim-api npm module](https://img.shields.io/npm/v/fabric-shim?label=fabric-shim-api)](https://www.npmjs.com/package/fabric-shim-api)
-[![Discord](https://img.shields.io/discord/905194001349627914?label=discord)](https://discordapp.com/channels/905194001349627914/943090527920877598)
+[![fabric-shim-crypto npm module](https://img.shields.io/npm/v/fabric-shim?label=fabric-shim-crypto)](https://www.npmjs.com/package/fabric-shim-crypto)
+[![Rocket.Chat](https://chat.hyperledger.org/images/join-chat.svg)](https://chat.hyperledger.org/channel/fabric-chaincode-dev)
 
-This is the project to support the writing of Contracts with the node.js runtime.
+This is the project to support the writing of Contracts with the node.js runtime. 
 
 ## Documentation
 
@@ -30,9 +24,9 @@ For details on what Nodejs runtime and versions of Hyperledger Fabric can be use
 
 ## npm Shrinkwrap
 
-In line with the advice from [npm on shrinkwrap](https://docs.npmjs.com/cli/v8/configuring-npm/npm-shrinkwrap-json) the modules published do not contain a `npm-shrinkwrap.json` file.
+In line with the advice from [npm on shrinkwrap](https://docs.npmjs.com/files/shrinkwrap.json#description) the modules published do not contain a `npm-shrinkwrap.json` file. 
 
-It is **STRONGLY** recommended therefore that after testing, and before putting your contract into production a `npm-shrinkwrap.json` file is created. When the chaincode is install it will be via a `npm install --production` command.
+It is **STRONGLY** recommended therefore that after testing, and before putting your contract into production a `npm-shrinkwrap.json` file is created. When the chaincode is install it will be via a `npm install --production` command. 
 
 ## Contributing
 

@@ -1,5 +1,5 @@
 {
-    "$schema": "https://hyperledger.github.io/fabric-chaincode-node/main/api/contract-schema.json",
+    "$schema": "https://hyperledger.github.io/fabric-chaincode-node/release-2.1/api/contract-schema.json",
     "contracts": {
         "TestContract": {
             "name": "TestContract",
@@ -107,7 +107,7 @@
         }
     },
     "info": {
-        "version": "2.5.0-unstable",
+        "version": "1.0.0",
         "title": "ts_chaincode"
     },
     "components": {

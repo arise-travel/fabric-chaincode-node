@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 */
 
-const {msp, common} = require('@hyperledger/fabric-protos');
+const fabprotos = require('../../bundle');
 
 const ROLE_TYPE_MEMBER = 'MEMBER';
 const ROLE_TYPE_PEER = 'PEER';
@@ -15,7 +15,7 @@ const ROLE_TYPE_PEER = 'PEER';
  * into validation parameter byte arrays, the shim provides convenience functions
  * that allow the chaincode developer to deal with endorsement policies in terms
  * of the MSP identifiers of organizations.
- * For more informations, please read the [documents]{@link https://hyperledger-fabric.readthedocs.io/en/latest/endorsement-policies.html#setting-key-level-endorsement-policies}
+ * For more informations, please read the [documents]{@link https://hyperledger-fabric.readthedocs.io/en/release-2.1/endorsement-policies.html#setting-key-level-endorsement-policies}
  *
  * @class
  */
@@ -28,7 +28,7 @@ class KeyEndorsementPolicy {
     constructor(policy) {
         this.orgs = {};
         if (policy) {
-            const spe = common.SignaturePolicyEnvelope.deserializeBinary(policy);
+            const spe = fabprotos.common.SignaturePolicyEnvelope.decode(policy);
             this._setMspIdsFromSPE(spe);
         }
     }
@@ -39,7 +39,7 @@ class KeyEndorsementPolicy {
      */
     getPolicy() {
         const spe = this._getPolicyFromMspId();
-        return spe.serializeBinary();
+        return fabprotos.common.SignaturePolicyEnvelope.encode(spe).finish();
     }
 
     /**
@@ -52,10 +52,10 @@ class KeyEndorsementPolicy {
         let mspRole;
         switch (role) {
             case ROLE_TYPE_MEMBER:
-                mspRole = msp.MSPRole.MSPRoleType.MEMBER;
+                mspRole = fabprotos.common.MSPRole.MSPRoleType.MEMBER;
                 break;
             case ROLE_TYPE_PEER:
-                mspRole = msp.MSPRole.MSPRoleType.PEER;
+                mspRole = fabprotos.common.MSPRole.MSPRoleType.PEER;
                 break;
             default:
                 throw new Error(`role type ${role} does not exist`);
@@ -92,12 +92,12 @@ class KeyEndorsementPolicy {
      */
     _setMspIdsFromSPE(signaturePolicyEnvelope) {
         // iterate over the identities in this envelope
-        signaturePolicyEnvelope.getIdentitiesList().forEach(identity => {
-            // this implementation only supports the ROLE type
+        signaturePolicyEnvelope.identities.forEach(identity => {
+            // this imlementation only supports the ROLE type
             /* istanbul ignore else */
-            if (identity.getPrincipalClassification() === msp.MSPPrincipal.Classification.ROLE) {
-                const msprole = msp.MSPRole.deserializeBinary(identity.getPrincipal());
-                this.orgs[msprole.getMspIdentifier()] = msprole.getRole();
+            if (identity.principalClassification === fabprotos.common.MSPPrincipal.Classification.ROLE) {
+                const msprole = fabprotos.common.MSPRole.decode(identity.principal);
+                this.orgs[msprole.mspIdentifier] = msprole.role;
             }
         });
     }
@@ -108,38 +108,41 @@ class KeyEndorsementPolicy {
      * @returns {_policiesProto.SignaturePolicyEnvelope} return the SignaturePolicyEnvelope instance
      */
     _getPolicyFromMspId() {
-
-        const spe = new common.SignaturePolicyEnvelope();
-        spe.setVersion(0);
-
         const mspIds = this.listOrgs();
-
         const principals = [];
         const sigsPolicies = [];
         mspIds.forEach((mspId, i) => {
-            const mspRole = new msp.MSPRole();
-            mspRole.setMspIdentifier(mspId);
-            mspRole.setRole(this.orgs[mspId]);
-
-            const principal = new msp.MSPPrincipal();
-            principal.setPrincipalClassification(msp.MSPPrincipal.Classification.ROLE);
-            principal.setPrincipal(mspRole.serializeBinary());
-
+            const mspRole = {
+                role: this.orgs[mspId],
+                mspIdentifier: mspId
+            };
+            const principal = {
+                principalClassification: fabprotos.common.MSPPrincipal.Classification.ROLE,
+                principal: fabprotos.common.MSPRole.encode(mspRole).finish()
+            };
             principals.push(principal);
 
-            const signedBy = new common.SignaturePolicy();
-            signedBy.setSignedBy(i);
+            const signedBy = {
+                signedBy: i,
+            };
             sigsPolicies.push(signedBy);
         });
 
-        const policy = new common.SignaturePolicy();
-        const nOutOf = new common.SignaturePolicy.NOutOf();
-        nOutOf.setN(mspIds.length);
-        nOutOf.setRulesList(sigsPolicies);
+        // create the policy: it requires exactly 1 signature from all of the principals
+        const allOf = {
+            n: mspIds.length,
+            rules: sigsPolicies
+        };
 
-        spe.setIdentitiesList(principals);
-        spe.setRule(policy);
+        const noutof = {
+            nOutOf: allOf
+        };
 
+        const spe = {
+            version: 0,
+            rule: noutof,
+            identities: principals
+        };
         return spe;
     }
 }

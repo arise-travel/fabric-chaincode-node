@@ -3,10 +3,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 */
-/* global */
+/* global describe it beforeEach afterEach before after */
 /* eslint-disable no-useless-escape */
 'use strict';
-
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -18,13 +17,13 @@ let Handler = rewire('../../../fabric-shim/lib/handler.js');
 const Stub = require('../../../fabric-shim/lib/stub.js');
 const MsgQueueHandler = Handler.__get__('MsgQueueHandler');
 const QMsg = Handler.__get__('QMsg');
+const StateQueryIterator = require('../../../fabric-shim/lib/iterators.js').StateQueryIterator;
+const HistoryQueryIterator = require('../../../fabric-shim/lib/iterators.js').HistoryQueryIterator;
 
-const {peer} = require('@hyperledger/fabric-protos');
-
+const fabprotos = require('../../bundle');
 const grpc = require('@grpc/grpc-js');
 const fs = require('fs');
 const path = require('path');
-const {ChaincodeEvent} = require('@hyperledger/fabric-protos/lib/peer');
 
 const sandbox = sinon.createSandbox();
 
@@ -33,34 +32,13 @@ const mockChaincodeImpl = {
     Invoke: function() {}
 };
 
-function mapToChaincodeMessage(msg) {
-    const msgPb = new peer.ChaincodeMessage();
-    msgPb.setType(msg.type);
-    msgPb.setPayload(msg.payload);
-    msgPb.setTxid(msg.txid);
-    msgPb.setChannelId(msg.channel_id);
-    msgPb.setChaincodeEvent(msg.chaincode_event);
-    return msgPb;
-}
-
-function mapFromChaincodeMessage(msgPb) {
-    return {
-        type: msgPb.getType(),
-        payload: Buffer.from(msgPb.getPayload_asU8()),
-        txid: msgPb.getTxid(),
-        channel_id: msgPb.getChannelId(),
-        proposal: msgPb.getProposal(),
-        chaincode_event: msgPb.getChaincodeEvent()
-    };
-}
-
 const ca = fs.readFileSync(path.join(__dirname, 'test-ca.pem'), 'utf8');
-const privatekey = fs.readFileSync(path.join(__dirname, 'test-key.base64'), 'utf8');
+const key = fs.readFileSync(path.join(__dirname, 'test-key.base64'), 'utf8');
 const cert = fs.readFileSync(path.join(__dirname, 'test-cert.base64'), 'utf8');
 
 const mockOpts = {
     pem: ca,
-    key: privatekey,
+    key: key,
     cert: cert
 };
 
@@ -78,8 +56,8 @@ describe('Handler', () => {
         let qMsg;
 
         const msg = {
-            getChannelId: () => 'theChannelID',
-            getTxid: () => 'aTx'
+            channel_id: 'theChannelID',
+            txid: 'aTx'
         };
 
         beforeEach(() => {
@@ -104,7 +82,7 @@ describe('Handler', () => {
 
         describe('getMsgTxContextId', () => {
             it ('should return the value of msg.channel_id concatenated with msg.txid', () => {
-                expect(qMsg.getMsgTxContextId()).to.deep.equal(msg.getChannelId() + msg.getTxid());
+                expect(qMsg.getMsgTxContextId()).to.deep.equal(msg.channel_id + msg.txid);
             });
         });
 
@@ -412,7 +390,7 @@ describe('Handler', () => {
         it ('should throw an error if argument missing URL argument', () => {
             expect(() => {
                 new Handler.ChaincodeSupportClient(mockChaincodeImpl);
-            }).to.throw(/Invalid URL/);
+            }).to.throw(/Invalid URL: undefined/);
         });
 
         it ('should throw an error if URL argument does not use grpc as protocol', () => {
@@ -487,7 +465,7 @@ describe('Handler', () => {
             expect(() => {
                 new Handler.ChaincodeSupportClient(mockChaincodeImpl, mockPeerAddress.secure, {
                     pem: ca,
-                    key: privatekey
+                    key: key
                 });
             }).to.throw(/encoded client certificate is required./);
         });
@@ -542,20 +520,14 @@ describe('Handler', () => {
                 const handler = new Handler.ChaincodeSupportClient(mockChaincodeImpl, mockPeerAddress.unsecure);
                 handler._client.register = sinon.stub().returns(mockStream);
 
-                const fakeChatMessage = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_STATE,
-                    payload: Buffer.from('starter message'),
-                    channel_id: 'theChannelID',
-                    txid: 'theTxID'
-                });
-
-                handler.chat(mapToChaincodeMessage(fakeChatMessage));
+                handler.chat('starter message example');
 
                 expect(handler._client.register.calledOnce).to.be.true;
                 expect(mockChaincodeMessageHandler.calledWithNew()).to.be.false;
                 expect(handler._stream).to.deep.equal(mockStream);
                 expect(handler._handler).to.deep.equal(new mockChaincodeMessageHandler(mockStream, mockChaincodeImpl));
                 expect(handler._handler.chat.calledOnce).to.be.true;
+                expect(handler._handler.chat.firstCall.args).to.deep.equal(['starter message example']);
             });
         });
 
@@ -602,13 +574,13 @@ describe('Handler', () => {
 
                 const MSG_TYPE = Handler.__get__('MSG_TYPE');
 
-                const registeredMsg = mapToChaincodeMessage({
+                const registeredMsg = {
                     type: MSG_TYPE.REGISTERED
-                });
+                };
 
-                const establishedMsg = mapToChaincodeMessage({
+                const establishedMsg = {
                     type: MSG_TYPE.READY
-                });
+                };
 
                 const eventReg = {};
                 const mockEventEmitter = (event, cb) => {
@@ -655,22 +627,22 @@ describe('Handler', () => {
                 });
 
                 it ('should throw error when in state created and MSG_TYPE not REGISTERED', () => {
-                    const badRegisteredMsg = mapToChaincodeMessage({
+                    const badRegisteredMsg = {
                         type: 'NOT REGISTERED'
-                    });
+                    };
 
                     eventReg.data(badRegisteredMsg);
 
                     expect(mockStream.write.calledTwice).to.be.true;
                     expect(mockNewErrorMsg.calledOnce).to.be.true;
                     expect(mockStream.write.secondCall.args).to.deep.equal(['some error']);
-                    expect(mockNewErrorMsg.firstCall.args).to.deep.equal([mapFromChaincodeMessage(badRegisteredMsg), 'created']);
+                    expect(mockNewErrorMsg.firstCall.args).to.deep.equal([badRegisteredMsg, 'created']);
                 });
 
                 it ('should throw error when in state established and MSG_TYPE not READY', () => {
-                    const badEstablishedMsg = mapToChaincodeMessage({
+                    const badEstablishedMsg = {
                         type: 'NOT REGISTERED'
-                    });
+                    };
 
                     eventReg.data(registeredMsg);
                     eventReg.data(badEstablishedMsg);
@@ -678,7 +650,7 @@ describe('Handler', () => {
                     expect(mockStream.write.calledTwice).to.be.true;
                     expect(mockNewErrorMsg.calledOnce).to.be.true;
                     expect(mockStream.write.secondCall.args).to.deep.equal(['some error']);
-                    expect(mockNewErrorMsg.firstCall.args).to.deep.equal([mapFromChaincodeMessage(badEstablishedMsg), 'established']);
+                    expect(mockNewErrorMsg.firstCall.args).to.deep.equal([badEstablishedMsg, 'established']);
                 });
 
                 it ('should do nothing when in state ready and MSG_TYPE equals REGISTERED', () => {
@@ -709,18 +681,18 @@ describe('Handler', () => {
                     eventReg.data(registeredMsg);
                     eventReg.data(establishedMsg);
 
-                    const readyMsg = mapToChaincodeMessage({
+                    const readyMsg = {
                         type: MSG_TYPE.RESPONSE,
                         channel_id: 'some channel',
                         txid: 'some tx id'
-                    });
+                    };
 
                     eventReg.data(readyMsg);
 
                     expect(mockStream.write.calledOnce).to.be.true;
                     expect(mockNewErrorMsg.notCalled).to.be.true;
                     expect(handleMsgResponseSpy.calledOnce).to.be.true;
-                    expect(handleMsgResponseSpy.firstCall.args).to.deep.equal([mapFromChaincodeMessage(readyMsg)]);
+                    expect(handleMsgResponseSpy.firstCall.args).to.deep.equal([readyMsg]);
                     expect(handleInitSpy.notCalled).to.be.true;
                     expect(handleTransactionSpy.notCalled).to.be.true;
                 });
@@ -729,18 +701,18 @@ describe('Handler', () => {
                     eventReg.data(registeredMsg);
                     eventReg.data(establishedMsg);
 
-                    const readyMsg = mapToChaincodeMessage({
+                    const readyMsg = {
                         type: MSG_TYPE.ERROR,
                         channel_id: 'some channel',
                         txid: 'some tx id'
-                    });
+                    };
 
                     eventReg.data(readyMsg);
 
                     expect(mockStream.write.calledOnce).to.be.true;
                     expect(mockNewErrorMsg.notCalled).to.be.true;
                     expect(handleMsgResponseSpy.calledOnce).to.be.true;
-                    expect(handleMsgResponseSpy.firstCall.args).to.deep.equal([mapFromChaincodeMessage(readyMsg)]);
+                    expect(handleMsgResponseSpy.firstCall.args).to.deep.equal([readyMsg]);
                     expect(handleInitSpy.notCalled).to.be.true;
                     expect(handleTransactionSpy.notCalled).to.be.true;
                 });
@@ -749,18 +721,18 @@ describe('Handler', () => {
                     eventReg.data(registeredMsg);
                     eventReg.data(establishedMsg);
 
-                    const readyMsg = mapToChaincodeMessage({
+                    const readyMsg = {
                         type: MSG_TYPE.INIT,
                         channel_id: 'some channel',
                         txid: 'some tx id'
-                    });
+                    };
 
                     eventReg.data(readyMsg);
                     expect(mockStream.write.calledOnce).to.be.true;
                     expect(mockNewErrorMsg.notCalled).to.be.true;
                     expect(handleMsgResponseSpy.notCalled).to.be.true;
                     expect(handleInitSpy.calledOnce).to.be.true;
-                    expect(handleInitSpy.firstCall.args).to.deep.equal([mapFromChaincodeMessage(readyMsg)]);
+                    expect(handleInitSpy.firstCall.args).to.deep.equal([readyMsg]);
                     expect(handleTransactionSpy.notCalled).to.be.true;
                 });
 
@@ -768,11 +740,11 @@ describe('Handler', () => {
                     eventReg.data(registeredMsg);
                     eventReg.data(establishedMsg);
 
-                    const readyMsg = mapToChaincodeMessage({
+                    const readyMsg = {
                         type: MSG_TYPE.TRANSACTION,
                         channel_id: 'some channel',
                         txid: 'some tx id'
-                    });
+                    };
 
                     eventReg.data(readyMsg);
                     expect(mockStream.write.calledOnce).to.be.true;
@@ -780,7 +752,7 @@ describe('Handler', () => {
                     expect(handleMsgResponseSpy.notCalled).to.be.true;
                     expect(handleInitSpy.notCalled).to.be.true;
                     expect(handleTransactionSpy.calledOnce).to.be.true;
-                    expect(handleTransactionSpy.firstCall.args).to.deep.equal([mapFromChaincodeMessage(readyMsg)]);
+                    expect(handleTransactionSpy.firstCall.args).to.deep.equal([readyMsg]);
                 });
 
                 it ('should end the process with value 1', () => {
@@ -789,11 +761,11 @@ describe('Handler', () => {
                     eventReg.data(registeredMsg);
                     eventReg.data(establishedMsg);
 
-                    const readyMsg = mapToChaincodeMessage({
+                    const readyMsg = {
                         type: 'something else',
                         channel_id: 'some channel',
                         txid: 'some tx id'
-                    });
+                    };
 
                     eventReg.data(readyMsg);
                     expect(mockStream.write.calledOnce).to.be.true;
@@ -905,17 +877,12 @@ describe('Handler', () => {
 
             let expectedMsg;
             before(() => {
-
-                const payloadPb = new peer.GetState();
-                payloadPb.setKey(key);
-                payloadPb.setCollection(collection);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_STATE,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.GET_STATE,
+                    payload: fabprotos.protos.GetState.encode({key, collection}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -958,17 +925,12 @@ describe('Handler', () => {
             let expectedMsg;
 
             before(() => {
-                const payloadPb = new peer.PutState();
-                payloadPb.setKey(key);
-                payloadPb.setValue(value);
-                payloadPb.setCollection(collection);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.PUT_STATE,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.PUT_STATE,
+                    payload: fabprotos.protos.PutState.encode({key, value, collection}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1010,15 +972,12 @@ describe('Handler', () => {
             let expectedMsg;
 
             before(() => {
-                const payloadPb = new peer.DelState();
-                payloadPb.setKey(key);
-                payloadPb.setCollection(collection);
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.DEL_STATE,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.DEL_STATE,
+                    payload: fabprotos.protos.DelState.encode({key, collection}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1053,56 +1012,6 @@ describe('Handler', () => {
             });
         });
 
-        describe('handlePurgeState', () => {
-            const key = 'theKey';
-            const collection = '';
-
-            let expectedMsg;
-
-            before(() => {
-                const payloadPb = new peer.PurgePrivateState();
-                payloadPb.setKey(key);
-                payloadPb.setCollection(collection);
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.PURGE_PRIVATE_DATA,
-                    payload: payloadPb.serializeBinary(),
-                    channel_id: 'theChannelID',
-                    txid: 'theTxID'
-                });
-            });
-
-            afterEach(() => {
-                Handler = rewire('../../../fabric-shim/lib/handler.js');
-                sandbox.restore();
-            });
-
-            it ('should resolve when _askPeerAndListen resolves', async () => {
-                const mockStream = {write: sinon.stub(), end: sinon.stub()};
-                const handler = new Handler.ChaincodeMessageHandler(mockStream, mockChaincodeImpl);
-                const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').resolves('some response');
-
-                const result = await handler.handlePurgeState(collection, key, 'theChannelID', 'theTxID');
-
-                expect(result).to.deep.equal('some response');
-                expect(_askPeerAndListenStub.firstCall.args.length).to.deep.equal(2);
-                expect(_askPeerAndListenStub.firstCall.args[0]).to.deep.equal(expectedMsg);
-                expect(_askPeerAndListenStub.firstCall.args[1]).to.deep.equal('PurgePrivateState');
-            });
-
-            it ('should reject when _askPeerAndListen rejects', async () => {
-                const mockStream = {write: sinon.stub(), end: sinon.stub()};
-                const handler = new Handler.ChaincodeMessageHandler(mockStream, mockChaincodeImpl);
-                const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').rejects();
-
-                const result = handler.handlePurgeState(collection, key, 'theChannelID', 'theTxID');
-
-                await expect(result).to.eventually.be.rejected;
-                expect(_askPeerAndListenStub.firstCall.args.length).to.deep.equal(2);
-                expect(_askPeerAndListenStub.firstCall.args[0]).to.deep.equal(expectedMsg);
-                expect(_askPeerAndListenStub.firstCall.args[1]).to.deep.equal('PurgePrivateState');
-            });
-        });
-
         describe('handlePutStateMetadata', () => {
             const key = 'theKey';
             const collection = '';
@@ -1111,21 +1020,19 @@ describe('Handler', () => {
             const ep = Buffer.from('theEP');
 
             before(() => {
-                const payloadPb = new peer.PutStateMetadata();
-                payloadPb.setCollection(collection);
-                payloadPb.setKey(key);
-
-                const metaPb = new peer.StateMetadata();
-                metaPb.setValue(ep);
-                metaPb.setMetakey(metadataKey);
-                payloadPb.setMetadata(metaPb);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.PUT_STATE_METADATA,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.PUT_STATE_METADATA,
+                    payload: fabprotos.protos.PutStateMetadata.encode({
+                        key,
+                        collection,
+                        metadata: {
+                            metakey: metadataKey,
+                            value: ep
+                        }
+                    }).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1166,16 +1073,12 @@ describe('Handler', () => {
 
             let expectedMsg;
             before(() => {
-                const payloadPb = new peer.GetState();
-                payloadPb.setKey(key);
-                payloadPb.setCollection(collection);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_PRIVATE_DATA_HASH,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.GET_PRIVATE_DATA_HASH,
+                    payload: fabprotos.protos.GetState.encode({key, collection}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1216,17 +1119,12 @@ describe('Handler', () => {
             let expectedMsg;
 
             before(() => {
-                const payloadPb = new peer.GetStateMetadata();
-
-                payloadPb.setKey(key);
-                payloadPb.setCollection(collection);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_STATE_METADATA,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.GET_STATE_METADATA,
+                    payload: fabprotos.protos.GetStateMetadata.encode({key, collection}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1268,16 +1166,12 @@ describe('Handler', () => {
 
             let expectedMsg;
             before(() => {
-                const payloadPb = new peer.GetStateByRange();
-                payloadPb.setEndkey(endKey);
-                payloadPb.setStartkey(startKey);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_STATE_BY_RANGE,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.GET_STATE_BY_RANGE,
+                    payload: fabprotos.protos.GetStateByRange.encode({startKey, endKey, collection}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1311,25 +1205,20 @@ describe('Handler', () => {
                 expect(_askPeerAndListenStub.firstCall.args[1]).to.deep.equal('GetStateByRange');
             });
 
-            it('should resolve with metadata when _askPeerAndListen resolves', async () => {
+            it ('should resolve with metadata when _askPeerAndListen resolves', async () => {
                 const mockStream = {write: sinon.stub(), end: sinon.stub()};
                 const handler = new Handler.ChaincodeMessageHandler(mockStream, mockChaincodeImpl);
                 const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').resolves('some response');
                 const metadata = Buffer.from('metadata');
 
                 const result = await handler.handleGetStateByRange(collection, startKey, endKey, 'theChannelID', 'theTxID', metadata);
-                const payloadPb = new peer.GetStateByRange();
-                payloadPb.setStartkey(startKey);
-                payloadPb.setEndkey(endKey);
-                payloadPb.setCollection(collection);
-                payloadPb.setMetadata(metadata);
 
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_STATE_BY_RANGE,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.GET_STATE_BY_RANGE,
+                    payload: fabprotos.protos.GetStateByRange.encode({startKey, endKey, collection, metadata}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
 
                 expect(result).to.deep.equal('some response');
                 expect(_askPeerAndListenStub.firstCall.args.length).to.deep.equal(2);
@@ -1343,15 +1232,12 @@ describe('Handler', () => {
 
             let expectedMsg;
             before(() => {
-                const payloadPb = new peer.QueryStateNext();
-                payloadPb.setId(id);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.QUERY_STATE_NEXT,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.QUERY_STATE_NEXT,
+                    payload: fabprotos.protos.QueryStateNext.encode({id}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1391,16 +1277,12 @@ describe('Handler', () => {
 
             let expectedMsg;
             before(() => {
-
-                const payloadPb = new peer.QueryStateNext();
-                payloadPb.setId(id);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.QUERY_STATE_CLOSE,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.QUERY_STATE_CLOSE,
+                    payload: fabprotos.protos.QueryStateNext.encode({id}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1441,16 +1323,12 @@ describe('Handler', () => {
 
             let expectedMsg;
             before(() => {
-                const payloadPb = new peer.GetQueryResult();
-                payloadPb.setQuery(query);
-                payloadPb.setCollection(collection);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_QUERY_RESULT,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.GET_QUERY_RESULT,
+                    payload: fabprotos.protos.GetQueryResult.encode({query, collection}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1492,17 +1370,12 @@ describe('Handler', () => {
 
                 const result = handler.handleGetQueryResult(collection, query, metadata, 'theChannelID', 'theTxID');
 
-                const payloadPb = new peer.GetQueryResult();
-                payloadPb.setQuery(query);
-                payloadPb.setCollection(collection);
-                payloadPb.setMetadata(metadata);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_QUERY_RESULT,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.GET_QUERY_RESULT,
+                    payload: fabprotos.protos.GetQueryResult.encode({query, collection, metadata}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
 
                 await expect(result).to.eventually.be.rejected;
                 expect(_askPeerAndListenStub.firstCall.args.length).to.deep.equal(2);
@@ -1516,15 +1389,12 @@ describe('Handler', () => {
 
             let expectedMsg;
             before(() => {
-                const payloadPb = new peer.GetHistoryForKey();
-                payloadPb.setKey(key);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.GET_HISTORY_FOR_KEY,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.GET_HISTORY_FOR_KEY,
+                    payload: fabprotos.protos.GetHistoryForKey.encode({key}).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1565,24 +1435,21 @@ describe('Handler', () => {
 
             let expectedMsg;
             before(() => {
-                // const argsAsBuffers = args.map((arg) => Buffer.from(arg, 'utf8'));
+                const argsAsBuffers = args.map((arg) => Buffer.from(arg, 'utf8'));
 
-                const chaincodeIdPb = new peer.ChaincodeID();
-                chaincodeIdPb.setName(chaincodeName);
-
-                const inputPb = new peer.ChaincodeInput();
-                inputPb.setArgsList(args.map((value) => Buffer.from(value)));
-
-                const payloadPb = new peer.ChaincodeSpec();
-                payloadPb.setChaincodeId(chaincodeIdPb);
-                payloadPb.setInput(inputPb);
-
-                expectedMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.INVOKE_CHAINCODE,
-                    payload: payloadPb.serializeBinary(),
+                expectedMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.INVOKE_CHAINCODE,
+                    payload: fabprotos.protos.ChaincodeSpec.encode({
+                        chaincodeId: {
+                            name: chaincodeName
+                        },
+                        input: {
+                            args: argsAsBuffers
+                        }
+                    }).finish(),
                     channel_id: 'theChannelID',
                     txid: 'theTxID'
-                });
+                };
             });
 
             afterEach(() => {
@@ -1593,29 +1460,29 @@ describe('Handler', () => {
             it ('should return decoded response when chaincode message type COMPLETED', async () => {
                 const mockStream = {write: sinon.stub(), end: sinon.stub()};
                 const handler = new Handler.ChaincodeMessageHandler(mockStream, mockChaincodeImpl);
+                const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').resolves({type: fabprotos.protos.ChaincodeMessage.Type.COMPLETED, payload: 'some payload'});
+                const decodeStub = sandbox.stub(fabprotos.protos.Response, 'decode').returns('some response');
 
-                const resp =  new peer.Response();
-                resp.setStatus(42);
-                const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').resolves({getType:() => peer.ChaincodeMessage.Type.COMPLETED,  getPayload:() => resp.serializeBinary()});
                 const result = await handler.handleInvokeChaincode(chaincodeName, args, 'theChannelID', 'theTxID');
 
-                expect(result).to.not.be.null;
+                expect(result).to.deep.equal('some response');
+                expect(decodeStub.firstCall.args.length).to.deep.equal(1);
+                expect(decodeStub.firstCall.args[0]).to.deep.equal('some payload');
                 expect(_askPeerAndListenStub.firstCall.args.length).to.deep.equal(2);
-
+                expect(_askPeerAndListenStub.firstCall.args[0]).to.deep.equal(expectedMsg);
                 expect(_askPeerAndListenStub.firstCall.args[1]).to.deep.equal('InvokeChaincode');
             });
 
-            it('should throw an error when _askPeerAndListen resolves with an error', async () => {
+            it ('should throw an error when _askPeerAndListen resolves with an error', async () => {
                 const mockStream = {write: sinon.stub(), end: sinon.stub()};
                 const handler = new Handler.ChaincodeMessageHandler(mockStream, mockChaincodeImpl);
-                const resp =  new peer.Response();
-                resp.setStatus(42);
-                const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').resolves({getType:() => peer.ChaincodeMessage.Type.ERROR, getPayload:() => resp.serializeBinary()});
-
+                const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').resolves({type: fabprotos.protos.ChaincodeMessage.Type.ERROR, payload: 'some payload'});
+                const decodeStub = sandbox.stub(fabprotos.protos.Response, 'decode').returns('some response');
 
                 const result = handler.handleInvokeChaincode(chaincodeName, args, 'theChannelID', 'theTxID');
 
-                await expect(result).to.eventually.be.rejected;
+                await expect(result).to.eventually.be.rejectedWith('some payload');
+                expect(decodeStub.called).to.deep.equal(false);
                 expect(_askPeerAndListenStub.firstCall.args.length).to.deep.equal(2);
                 expect(_askPeerAndListenStub.firstCall.args[0]).to.deep.equal(expectedMsg);
                 expect(_askPeerAndListenStub.firstCall.args[1]).to.deep.equal('InvokeChaincode');
@@ -1625,7 +1492,7 @@ describe('Handler', () => {
                 const mockStream = {write: sinon.stub(), end: sinon.stub()};
                 const handler = new Handler.ChaincodeMessageHandler(mockStream, mockChaincodeImpl);
                 const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').rejects();
-                const decodeStub = sandbox.stub(peer.Response, 'deserializeBinary').returns('some response');
+                const decodeStub = sandbox.stub(fabprotos.protos.Response, 'decode').returns('some response');
 
                 const result = handler.handleInvokeChaincode(chaincodeName, args, 'theChannelID', 'theTxID');
 
@@ -1636,6 +1503,20 @@ describe('Handler', () => {
                 expect(_askPeerAndListenStub.firstCall.args[1]).to.deep.equal('InvokeChaincode');
             });
 
+            it ('should return nothing chaincode message type not COMPLETED or ERROR', async () => {
+                const mockStream = {write: sinon.stub(), end: sinon.stub()};
+                const handler = new Handler.ChaincodeMessageHandler(mockStream, mockChaincodeImpl);
+                const _askPeerAndListenStub = sandbox.stub(handler, '_askPeerAndListen').resolves({type: fabprotos.protos.ChaincodeMessage.Type.SOMETHING_ELSE, payload: 'some payload'});
+                const decodeStub = sandbox.stub(fabprotos.protos.Response, 'decode').returns('some response');
+
+                const result = await handler.handleInvokeChaincode(chaincodeName, args, 'theChannelID', 'theTxID');
+
+                expect(result).to.deep.equal(undefined);
+                expect(decodeStub.called).to.deep.equal(false);
+                expect(_askPeerAndListenStub.firstCall.args.length).to.deep.equal(2);
+                expect(_askPeerAndListenStub.firstCall.args[0]).to.deep.equal(expectedMsg);
+                expect(_askPeerAndListenStub.firstCall.args[1]).to.deep.equal('InvokeChaincode');
+            });
         });
 
         describe('_askPeerAndListen', () => {
@@ -1676,13 +1557,18 @@ describe('Handler', () => {
 
         let decodeStub;
 
+        const msg = {
+            channel_id: 'theChannelID',
+            txid: 'aTX',
+            payload: 'some payload',
+            proposal: 'some proposal'
+        };
+
         const mockHandler = {};
         mockHandler.chaincode = {};
 
         const mockStub = sinon.createStubInstance(Stub);
-        mockStub.chaincodeEvent = new ChaincodeEvent();
-        mockStub.chaincodeEvent.setEventName('Some event');
-        mockStub.chaincodeEvent.setPayload(Buffer.from('aaa'));
+        mockStub.chaincodeEvent = 'some event';
 
         let saveCreateStub;
 
@@ -1695,7 +1581,7 @@ describe('Handler', () => {
 
             mockHandler._stream = {write: sinon.stub()};
 
-            decodeStub = sandbox.stub(peer.ChaincodeInput, 'deserializeBinary').returns('some message');
+            decodeStub = sandbox.stub(fabprotos.protos.ChaincodeInput, 'decode').returns('some message');
 
             const createStubStub = sandbox.stub().returns(mockStub);
             Handler.__set__('createStub', createStubStub);
@@ -1707,27 +1593,22 @@ describe('Handler', () => {
         });
 
         describe('Error', () => {
-            beforeEach(() => {
+            let expectedResponse;
 
+            beforeEach(() => {
+                expectedResponse = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.ERROR,
+                    payload: Buffer.from('shim message'),
+                    channel_id: msg.channel_id,
+                    txid: msg.txid
+                };
             });
 
             it ('should handle an error decoding the payload', async () => {
                 decodeStub.restore();
-                decodeStub = sandbox.stub(peer.ChaincodeInput, 'deserializeBinary').throws('some error');
+                decodeStub = sandbox.stub(fabprotos.protos.ChaincodeInput, 'decode').throws('some error');
 
-                const msg = {
-                    channel_id: 'theChannelID',
-                    txid: '012345678cafebabe',
-                    payload: Buffer.from('some payload'),
-                    proposal: 'some proposal'
-                };
-
-                const expectedResponse = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.ERROR,
-                    payload: Buffer.from('some payload'),
-                    channel_id: msg.channel_id,
-                    txid: msg.txid
-                });
+                expectedResponse.payload = msg.payload;
 
                 await handleMessage(msg, mockHandler, 'init');
 
@@ -1740,37 +1621,17 @@ describe('Handler', () => {
                 const createStubStub = sandbox.stub().throws('an error');
                 Handler.__set__('createStub', createStubStub);
 
-                const msg = {
-                    channel_id: 'theChannelID',
-                    txid: '012345678cafebabe',
-                    payload: 'some payload',
-                    proposal: 'some proposal'
-                };
-
-                const expectedResponse = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.ERROR,
-                    payload: Buffer.from('an error'),
-                    channel_id: msg.channel_id,
-                    txid: msg.txid
-                });
+                expectedResponse.payload = Buffer.from('an error');
 
                 await handleMessage(msg, mockHandler, 'init');
 
                 expect(decodeStub.calledOnce).to.be.true;
                 expect(mockHandler._stream.write.calledOnce).to.be.true;
-                expect(mapFromChaincodeMessage(mockHandler._stream.write.firstCall.args[0])).to.deep.equal(mapFromChaincodeMessage(expectedResponse));
+                expect(mockHandler._stream.write.firstCall.args[0]).to.deep.equal(expectedResponse);
             });
 
             it ('should handle chaincode.Init returning nothing', async () => {
                 mockHandler.chaincode.Init = sandbox.stub().resolves();
-
-                const msg = {
-                    channel_id: 'theChannelID',
-                    txid: '012345678cafebabe',
-                    payload: Buffer.from('some payload'),
-                    proposal: 'some proposal',
-                    chaincode_event: ''
-                };
 
                 await handleMessage(msg, mockHandler, 'init');
 
@@ -1778,65 +1639,30 @@ describe('Handler', () => {
                 expect(mockHandler.chaincode.Init.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Init.firstCall.args[0]).to.deep.equal(mockStub);
 
-                const text = '[theChannelID-01234567] Calling chaincode Init() has not called success or error.';
-
-                const payloadPb = new peer.Response();
-                payloadPb.setStatus(Stub.RESPONSE_CODE.ERROR);
-                payloadPb.setMessage(text);
-                const payload = payloadPb.serializeBinary();
-                const expectedResponse = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.COMPLETED,
-                    payload,
-                    channel_id: msg.channel_id,
-                    txid: msg.txid,
-                    chaincode_event: mockStub.chaincodeEvent
-                });
-
+                const text = '[theChannelID-aTX] Calling chaincode Init() has not called success or error.';
+                expectedResponse.payload = Buffer.from(text);
                 expect(mockHandler._stream.write.calledOnce).to.be.true;
-                expect(mapFromChaincodeMessage(mockHandler._stream.write.firstCall.args[0])).to.deep.equal(mapFromChaincodeMessage(expectedResponse));
+                expect(mockHandler._stream.write.firstCall.args[0].payload.toString()).to.equal(text);
+                expect(mockHandler._stream.write.firstCall.args[0]).to.deep.equal(expectedResponse);
             });
 
-            it('should handle chaincode.Invoke returning nothing', async () => {
+            it ('should handle chaincode.Invoke returning nothing', async () => {
                 mockHandler.chaincode.Invoke = sandbox.stub().resolves();
-                const msg = {
-                    channel_id: 'theChannelID',
-                    txid: '012345678cafebabe',
-                    payload: Buffer.from('some payload'),
-                    proposal: 'some proposal',
-                };
 
                 await handleMessage(msg, mockHandler, 'invoke');
 
                 expect(decodeStub.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Invoke.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Invoke.firstCall.args[0]).to.deep.equal(mockStub);
-                const text = '[theChannelID-01234567] Calling chaincode Invoke() has not called success or error.';
-                const payloadPb = new peer.Response();
-                payloadPb.setStatus(Stub.RESPONSE_CODE.ERROR);
-                payloadPb.setMessage(text);
-                const payload = payloadPb.serializeBinary();
-                const expectedResponse = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.COMPLETED,
-                    payload,
-                    channel_id: msg.channel_id,
-                    txid: msg.txid,
-                    chaincode_event: mockStub.chaincodeEvent
-
-                });
-
+                const text = '[theChannelID-aTX] Calling chaincode Invoke() has not called success or error.';
+                expectedResponse.payload = Buffer.from(text);
                 expect(mockHandler._stream.write.calledOnce).to.be.true;
-                expect(mapFromChaincodeMessage(mockHandler._stream.write.firstCall.args[0])).to.deep.equal(mapFromChaincodeMessage(expectedResponse));
+
+                expect(mockHandler._stream.write.firstCall.args[0].payload.toString()).to.equal(text);
+                expect(mockHandler._stream.write.firstCall.args[0]).to.deep.equal(expectedResponse);
             });
 
             it ('should handle chaincode.Init returning no status', async () => {
-                const msg = {
-                    channel_id: 'theChannelID',
-                    txid: '012345678cafebabe',
-                    payload: 'some payload',
-                    proposal: 'some proposal'
-                };
-
-
                 mockHandler.chaincode.Init = sandbox.stub().resolves({});
 
                 await handleMessage(msg, mockHandler, 'init');
@@ -1844,33 +1670,16 @@ describe('Handler', () => {
                 expect(decodeStub.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Init.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Init.firstCall.args[0]).to.deep.equal(mockStub);
-                const text = '[theChannelID-01234567] Calling chaincode Init() has not called success or error.';
-                const payloadPb = new peer.Response();
-                payloadPb.setStatus(Stub.RESPONSE_CODE.ERROR);
-                payloadPb.setMessage(text);
-                const payload = payloadPb.serializeBinary();
+                const text = '[theChannelID-aTX] Calling chaincode Init() has not called success or error.';
+                expectedResponse.payload = Buffer.from(text);
 
-
-                const expectedResponse = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.COMPLETED,
-                    payload,
-                    channel_id: msg.channel_id,
-                    txid: msg.txid,
-                    chaincode_event: mockStub.chaincodeEvent
-                });
                 expect(mockHandler._stream.write.calledOnce).to.be.true;
-                expect(mapFromChaincodeMessage(mockHandler._stream.write.firstCall.args[0])).to.deep.equal(mapFromChaincodeMessage(expectedResponse));
+
+                expect(mockHandler._stream.write.firstCall.args[0].payload.toString()).to.equal(text);
+                expect(mockHandler._stream.write.firstCall.args[0]).to.deep.equal(expectedResponse);
             });
 
             it ('should handle chaincode.Invoke returning no status', async () => {
-                const msg = {
-                    channel_id: 'theChannelID',
-                    txid: '012345678cafebabe',
-                    payload: 'some payload',
-                    proposal: 'some proposal'
-                };
-
-
                 mockHandler.chaincode.Invoke = sandbox.stub().resolves({});
 
                 await handleMessage(msg, mockHandler, 'invoke');
@@ -1878,44 +1687,26 @@ describe('Handler', () => {
                 expect(decodeStub.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Invoke.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Invoke.firstCall.args[0]).to.deep.equal(mockStub);
-                const text = '[theChannelID-01234567] Calling chaincode Invoke() has not called success or error.';
-                const payloadPb = new peer.Response();
-                payloadPb.setStatus(Stub.RESPONSE_CODE.ERROR);
-                payloadPb.setMessage(text);
-                const payload = payloadPb.serializeBinary();
+                const text = '[theChannelID-aTX] Calling chaincode Invoke() has not called success or error.';
+                expectedResponse.payload = Buffer.from(text);
 
-                const expectedResponse = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.COMPLETED,
-                    payload,
-                    channel_id: msg.channel_id,
-                    txid: msg.txid,
-                    chaincode_event: mockStub.chaincodeEvent
-                });
                 expect(mockHandler._stream.write.calledOnce).to.be.true;
-                expect(mapFromChaincodeMessage(mockHandler._stream.write.firstCall.args[0])).to.deep.equal(mapFromChaincodeMessage(expectedResponse));
+                expect(mockHandler._stream.write.firstCall.args[0]).to.deep.equal(expectedResponse);
+                expect(mockHandler._stream.write.firstCall.args[0].payload.toString()).to.equal(text);
             });
         });
 
         describe('Complete', () => {
             let expectedResponse;
-            let msg;
-            beforeEach(() => {
-                const payloadPb = new peer.Response();
-                payloadPb.setStatus(Stub.RESPONSE_CODE.OK);
-                msg = {
-                    channel_id: 'theChannelID',
-                    txid: '012345678cafebabe',
-                    payload: 'some payload',
-                    proposal: 'some proposal'
-                };
 
-                expectedResponse = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.COMPLETED,
-                    payload: payloadPb.serializeBinary(),
+            beforeEach(() => {
+                expectedResponse = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.COMPLETED,
+                    payload: fabprotos.protos.Response.encode({status: Stub.RESPONSE_CODE.OK}).finish(),
                     channel_id: msg.channel_id,
                     txid: msg.txid,
                     chaincode_event: mockStub.chaincodeEvent
-                });
+                };
             });
 
             it ('should write a COMPLETE message when successful init', async () => {
@@ -1927,7 +1718,7 @@ describe('Handler', () => {
                 expect(mockHandler.chaincode.Init.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Init.firstCall.args[0]).to.deep.equal(mockStub);
                 expect(mockHandler._stream.write.calledOnce).to.be.true;
-                expect(mapFromChaincodeMessage(mockHandler._stream.write.firstCall.args[0])).to.deep.equal(mapFromChaincodeMessage(expectedResponse));
+                expect(mockHandler._stream.write.firstCall.args[0]).to.deep.equal(expectedResponse);
             });
 
             it ('should write a COMPLETE message when successful invoke', async () => {
@@ -1939,7 +1730,7 @@ describe('Handler', () => {
                 expect(mockHandler.chaincode.Invoke.calledOnce).to.be.true;
                 expect(mockHandler.chaincode.Invoke.firstCall.args[0]).to.deep.equal(mockStub);
                 expect(mockHandler._stream.write.calledOnce).to.be.true;
-                expect(mapFromChaincodeMessage(mockHandler._stream.write.firstCall.args[0])).to.deep.equal(mapFromChaincodeMessage(expectedResponse));
+                expect(mockHandler._stream.write.firstCall.args[0]).to.deep.equal(expectedResponse);
             });
         });
     });
@@ -1983,7 +1774,7 @@ describe('Handler', () => {
             const result = newErrorMsg(msg, state);
 
             const expectedResponse = {
-                type: 7,
+                type: 'ERROR',
                 payload: Buffer.from(`[${msg.channel_id}-${msg.txid}] Chaincode handler FSM cannot handle message (${msg.type}) with payload size (8) while in state: ${state}`),
                 channel_id: 'theChannelID',
                 txid: 'aTX'
@@ -2004,14 +1795,14 @@ describe('Handler', () => {
             ep = Buffer.from('someEP');
             metaKey = 'theMetaKey';
 
-            const smr = new peer.StateMetadataResult();
-
-            const md1 = new peer.StateMetadata();
-            md1.setMetakey(metaKey);
-            md1.setValue(ep);
-            smr.addEntries(md1);
-
-            payload = smr.serializeBinary();
+            payload = fabprotos.protos.StateMetadataResult.encode({
+                entries: [
+                    {
+                        metakey: metaKey,
+                        value: ep
+                    }
+                ]
+            }).finish();
         });
 
         it('should success', () => {
@@ -2021,42 +1812,10 @@ describe('Handler', () => {
         });
     });
 
-    describe('handleGetQueryResult', () => {
-        let handleGetQueryResult;
-
-        before(() => {
-            handleGetQueryResult = Handler.__get__('handleGetQueryResult');
-        });
-
-        it('should success, with no metadata', () => {
-
-            const queryResp = new peer.QueryResponse();
-            const result = handleGetQueryResult({},
-                {channel_id:'chid', txid:'0xcafebabe', payload:queryResp.serializeBinary()},
-                'getall');
-
-            expect(result).to.not.be.null;
-
-        });
-
-        it('should success', () => {
-
-            const queryMetadata = new peer.QueryResponseMetadata();
-            queryMetadata.setBookmark('wibble');
-
-            const queryResp = new peer.QueryResponse();
-            queryResp.setMetadata(queryMetadata.serializeBinary());
-            const result = handleGetQueryResult({},
-                {channel_id:'chid', txid:'0xcafebabe', payload:queryResp.serializeBinary()},
-                'getall');
-
-            expect(result).to.not.be.null;
-            expect(result.metadata.bookmark).to.equal(queryMetadata.getBookmark());
-
-        });
-    });
-
     describe('parseResponse', () => {
+        const qrDecodedPayload = 'qr decoded payload';
+        const ccDecodedPayload = 'cc decoded payload';
+        const mdDecodedPayload = 'metadata decoded payload';
 
         let MSG_TYPE;
 
@@ -2075,13 +1834,17 @@ describe('Handler', () => {
 
             MSG_TYPE = Handler.__get__('MSG_TYPE');
 
+            sandbox.stub(fabprotos.protos.QueryResponse, 'decode').returns(qrDecodedPayload);
+            sandbox.stub(fabprotos.protos.ChaincodeMessage, 'decode').returns(ccDecodedPayload);
+            sandbox.stub(fabprotos.protos.QueryResponseMetadata, 'decode').returns(mdDecodedPayload);
+
             parseResponse = Handler.__get__('parseResponse');
         });
 
         beforeEach(() => {
             res = {
                 type: MSG_TYPE.RESPONSE,
-                payload: Buffer.from('some payload'),
+                payload: 'some payload',
                 channel_id: 'theChannelID',
                 txid: 'aTx'
             };
@@ -2093,7 +1856,6 @@ describe('Handler', () => {
         after(() => {
             Handler.__set__('StateQueryIterator', saveStateQueryIterator);
             Handler.__set__('HistoryQueryIterator', saveHistoryQueryIterator);
-            sandbox.restore();
         });
 
         it ('should throw an error when type not MSG_TYPE RESPONSE or ERROR', () => {
@@ -2133,99 +1895,81 @@ describe('Handler', () => {
         });
 
         it ('should return QueryResponse.decoded payload for QueryStateClose', () => {
-            const queryResp = new peer.QueryResponse();
-            queryResp.setMetadata('wibble');
-            res.payload = queryResp.serializeBinary();
             const result = parseResponse(handler, res, 'QueryStateClose');
-            expect(result).is.not.null;
+
+            expect(result).to.deep.equal(qrDecodedPayload);
         });
 
         it ('should return QueryResponse.decoded payload for QueryStateNext', () => {
-
-            const queryResp = new peer.QueryResponse();
-            queryResp.setMetadata('wibble');
-            res.payload = queryResp.serializeBinary();
             const result = parseResponse(handler, res, 'QueryStateNext');
-            expect(result).is.not.null;
 
+            expect(result).to.deep.equal(qrDecodedPayload);
         });
 
-        it('should return error for failed InvokeChaincode', () => {
-            const resp = new peer.Response();
-            const cm = new peer.ChaincodeMessage();
-            resp.setMessage('wibble');
-            cm.setPayload(resp.serializeBinary());
-            res.payload = cm.serializeBinary();
-
-            const result =  parseResponse(handler, res, 'InvokeChaincode');
-            expect(result).is.not.null;
-        });
-
-        it('should return ChaincodeMessage.decoded payload for InvokeChaincode', () => {
-            const resp = new peer.Response();
-            resp.setStatus(42);
-            const cm = new peer.ChaincodeMessage();
-            cm.setPayload(resp.serializeBinary());
-            cm.setType(peer.ChaincodeMessage.Type.COMPLETED);
-            res.payload = cm.serializeBinary();
-
-
+        it ('should return ChaincodeMessage.decoded payload for InvokeChaincode', () => {
             const result = parseResponse(handler, res, 'InvokeChaincode');
-            expect(result).is.not.null;
+
+            expect(result).to.deep.equal(ccDecodedPayload);
         });
 
-        it('should return a StateQueryIterator for GetStateByRange', () => {
+        it ('should return a StateQueryIterator for GetStateByRange', () => {
+            const mockStateQueryIterator = sinon.spy(() => {
+                return sinon.createStubInstance(StateQueryIterator);
+            });
+            Handler.__set__('StateQueryIterator', mockStateQueryIterator);
 
-            const queryMetadata = new peer.QueryResponseMetadata();
-            queryMetadata.setBookmark('wibble');
+            parseResponse(handler, res, 'GetStateByRange');
 
-            const queryResp = new peer.QueryResponse();
-            queryResp.setMetadata(queryMetadata.serializeBinary());
-
-            res.payload = queryResp.serializeBinary();
-
-            const resp = parseResponse(handler, res, 'GetStateByRange');
-            expect(resp).is.not.null;
-            expect(resp.metadata).is.not.null;
-            expect(resp.iterator).is.not.null;
-            expect(resp.iterator.constructor.name).to.equal('StateQueryIterator');
-
+            expect(mockStateQueryIterator.calledWithNew()).to.be.false;
+            expect(mockStateQueryIterator.firstCall.args).to.deep.equal([handler, res.channel_id, res.txid, qrDecodedPayload]);
         });
 
-        it('should return a StateQueryIterator for GetQueryResult', () => {
 
-            const queryMetadata = new peer.QueryResponseMetadata();
-            queryMetadata.setBookmark('wibble');
+        it ('should decode metadata', () => {
+            const mockStateQueryIterator = sinon.spy(() => {
+                return sinon.createStubInstance(StateQueryIterator);
+            });
+            const pagedQrPayload = {
+                results: 'some results',
+                metadata: 'some metadata',
+            };
+            fabprotos.protos.QueryResponse.decode.returns(pagedQrPayload);
+            Handler.__set__('StateQueryIterator', mockStateQueryIterator);
 
-            const queryResp = new peer.QueryResponse();
-            queryResp.setMetadata(queryMetadata.serializeBinary());
+            const result = parseResponse(handler, res, 'GetStateByRange');
 
-            res.payload = queryResp.serializeBinary();
-            const resp = parseResponse(handler, res, 'GetQueryResult');
-            expect(resp).is.not.null;
-            expect(resp.metadata).is.not.null;
-            expect(resp.iterator).is.not.null;
-            expect(resp.iterator.constructor.name).to.equal('StateQueryIterator');
+            expect(mockStateQueryIterator.calledWithNew()).to.be.false;
+            expect(mockStateQueryIterator.firstCall.args).to.deep.equal([handler, res.channel_id, res.txid, pagedQrPayload]);
+
+            expect(result.metadata).to.eql(mdDecodedPayload);
+            fabprotos.protos.QueryResponse.decode.returns(qrDecodedPayload);
+        });
+
+        it ('should return a StateQueryIterator for GetQueryResult', () => {
+            const mockStateQueryIterator = sinon.spy(() => {
+                return sinon.createStubInstance(StateQueryIterator);
+            });
+            Handler.__set__('StateQueryIterator', mockStateQueryIterator);
+
+            parseResponse(handler, res, 'GetQueryResult');
+
+            expect(mockStateQueryIterator.calledWithNew()).to.be.false;
+            expect(mockStateQueryIterator.firstCall.args).to.deep.equal([handler, res.channel_id, res.txid, qrDecodedPayload]);
         });
 
         it ('should return a HistoryQueryIterator for GetHistoryForKey', () => {
-            const queryMetadata = new peer.QueryResponseMetadata();
-            queryMetadata.setBookmark('wibble');
+            const mockHistoryQueryIterator = sinon.spy(() => {
+                return sinon.createStubInstance(HistoryQueryIterator);
+            });
+            Handler.__set__('HistoryQueryIterator', mockHistoryQueryIterator);
 
-            const queryResp = new peer.QueryResponse();
-            queryResp.setMetadata(queryMetadata.serializeBinary());
-
-            res.payload = queryResp.serializeBinary();
             parseResponse(handler, res, 'GetHistoryForKey');
 
-            const resp = parseResponse(handler, res, 'GetQueryResult');
-            expect(resp).is.not.null;
-            expect(resp.metadata).is.not.null;
-            expect(resp.iterator).is.not.null;
-            expect(resp.iterator.constructor.name).to.equal('StateQueryIterator');
+            expect(mockHistoryQueryIterator.calledWithNew()).to.be.false;
+            expect(mockHistoryQueryIterator.firstCall.args).to.deep.equal([handler, res.channel_id, res.txid, qrDecodedPayload]);
         });
 
-        it('should decode state metadata for GetStateMetadata', () => {
+        it('shold decode state metadata for GetStateMetadata', () => {
             const mockHandleGetStateMetadata = sinon.stub().returns('decoded response');
             Handler.__set__('handleGetStateMetadata', mockHandleGetStateMetadata);
             const result = parseResponse(handler, res, 'GetStateMetadata');

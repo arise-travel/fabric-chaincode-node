@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 */
-/* global  */
+/* global describe it beforeEach afterEach before after */
 'use strict';
 
 const sinon = require('sinon');
@@ -14,13 +14,11 @@ const fs = require('fs');
 const path = require('path');
 const rewire = require('rewire');
 
-const {peer} = require('@hyperledger/fabric-protos');
-
-
+const fabprotos = require('../../bundle');
 const grpc = require('@grpc/grpc-js');
 
 const serverPath = '../../lib/server';
-const ChaincodeServer = rewire(serverPath);
+let ChaincodeServer = rewire(serverPath);
 
 const mockChaincode = {Init: () => {}, Invoke: () => {}};
 
@@ -92,7 +90,6 @@ describe('ChaincodeServer', () => {
             expect(server._credentials).to.deep.equal(mockTLSCredentials);
 
             expect(sslCredentialsStub.calledOnce).to.be.true;
-
             expect(sslCredentialsStub.firstCall.args[0]).to.be.null;
             expect(sslCredentialsStub.firstCall.args[1]).to.deep.equal([{
                 private_key: tlsKey,
@@ -108,7 +105,6 @@ describe('ChaincodeServer', () => {
             expect(server._credentials).to.deep.equal(mockTLSCredentials);
 
             expect(sslCredentialsStub.calledOnce).to.be.true;
-
             expect(sslCredentialsStub.firstCall.args[0]).to.deep.equal(tlsClientCA);
             expect(sslCredentialsStub.firstCall.args[1]).to.deep.equal([{
                 private_key: tlsKey,
@@ -160,7 +156,6 @@ describe('ChaincodeServer', () => {
 
             expect(await server.start()).not.to.throw;
             expect(server._server.bindAsync.calledOnce).to.be.true;
-
             expect(server._server.bindAsync.firstCall.args[0]).to.equal(serverOpts.address);
             expect(server._server.bindAsync.firstCall.args[1]).to.equal(mockCredentials);
             expect(server._server.start.calledOnce).to.be.true;
@@ -189,18 +184,16 @@ describe('ChaincodeServer', () => {
 
             const server = new ChaincodeServer(mockChaincode, serverOpts);
             const mockStream = {on: sinon.stub(), write: sinon.stub()};
-
+            
             server.connect(mockStream);
 
             expect(mockHandlerStub.calledOnce).to.be.true;
             expect(mockHandler.chat.calledOnce).to.be.true;
-
-            const payloadPb = new peer.ChaincodeID();
-            payloadPb.setName('example-chaincode-id');
-
             expect(mockHandler.chat.firstCall.args).to.deep.equal([{
-                type: peer.ChaincodeMessage.Type.REGISTER,
-                payload: payloadPb.serializeBinary()
+                type: fabprotos.protos.ChaincodeMessage.Type.REGISTER,
+                payload: fabprotos.protos.ChaincodeID.encode({
+                    name: 'example-chaincode-id'
+                }).finish()
             }]);
         });
 
@@ -211,7 +204,7 @@ describe('ChaincodeServer', () => {
             const mockHandlerStub = sinon.stub().returns(mockHandler);
             ChaincodeServer.__set__('ChaincodeMessageHandler', mockHandlerStub);
 
-            const server = new ChaincodeServer(mockChaincode, serverOpts);
+            const server = new ChaincodeServer(mockChaincode, serverOpts);           
             const mockStream = {on: sinon.stub(), write: sinon.stub()};
 
             server.connect(mockStream);

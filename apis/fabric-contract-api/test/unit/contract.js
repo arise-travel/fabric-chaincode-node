@@ -1,7 +1,15 @@
 /*
- * Copyright IBM Corp. All Rights Reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * SPDX-License-Identifier: Apache-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 /* global describe it beforeEach afterEach  */
 'use strict';
@@ -22,7 +30,6 @@ const Context = require(path.join(pathToRoot, 'fabric-contract-api/lib/context')
 
 let beforeStub;
 let afterStub;
-let aroundStub;
 let unknownStub;
 let createContextStub;
 
@@ -30,9 +37,11 @@ let createContextStub;
 * A fake  contract class;
 */
 class SCAlpha extends Contract {
+
     /** */
     constructor() {
         super('alpha.beta.delta');
+
     }
 
     async unknownTransaction(ctx) {
@@ -47,20 +56,19 @@ class SCAlpha extends Contract {
         afterStub(ctx, result);
     }
 
-    async aroundTransaction(ctx, fn, parameters) {
-        aroundStub(ctx, fn, ...parameters);
-    }
-
     createContext() {
         createContextStub();
     }
 }
 
 class SCBeta extends Contract {
+
     /** */
     constructor() {
         super();
+
     }
+
 }
 
 describe('contract.js', () => {
@@ -119,13 +127,13 @@ describe('contract.js', () => {
             expect(sc3.getName()).to.equal('SCBeta');
         });
 
-        it ('should call the default before/after/around functions', () => {
+        it ('should call the default before/after functions', () => {
             const sc0 = new Contract();
+
 
             return Promise.all([
                 sc0.beforeTransaction().should.be.fulfilled,
-                sc0.afterTransaction().should.be.fulfilled,
-                sc0.aroundTransaction(null, 'afterTransaction', [null]).should.be.fulfilled]);
+                sc0.afterTransaction().should.be.fulfilled]);
         });
 
         it ('should call the default createContext functions', () => {
@@ -164,7 +172,6 @@ describe('contract.js', () => {
         beforeEach('setup the stubs', () => {
             beforeStub = sandbox.stub().resolves();
             afterStub = sandbox.stub().resolves();
-            aroundStub = sandbox.stub().resolves();
             unknownStub = sandbox.stub().resolves();
             createContextStub = sandbox.stub().returns();
         });
@@ -184,11 +191,6 @@ describe('contract.js', () => {
             sc.afterTransaction(ctx, 'result');
             sinon.assert.calledOnce(afterStub);
             sinon.assert.calledWith(afterStub, ctx, 'result');
-
-            const params = ['param1', 'param2']
-            sc.aroundTransaction(ctx, 'function', params);
-            sinon.assert.calledOnce(aroundStub);
-            sinon.assert.calledWith(aroundStub, ctx, 'function', 'param1', 'param2');
 
             sc.unknownTransaction(ctx);
             sinon.assert.calledOnce(unknownStub);

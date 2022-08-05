@@ -1,17 +1,16 @@
-/* eslint-disable no-prototype-builtins */
 /*
 # Copyright IBM Corp. All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 */
-/* global */
+/* global describe it beforeEach afterEach before after */
 'use strict';
 
 const sinon = require('sinon');
 const chai = require('chai');
 const expect = chai.expect;
 const rewire = require('rewire');
-
+const fabprotos = require('../../bundle');
 const path = require('path');
 const fs = require('fs');
 
@@ -28,8 +27,6 @@ const keyPath = path.join(__dirname, 'test-key.base64');
 const ca = fs.readFileSync(caPath, 'utf8');
 const key = fs.readFileSync(keyPath, 'utf8');
 const cert = fs.readFileSync(certPath, 'utf8');
-
-const {peer} = require('@hyperledger/fabric-protos');
 
 describe('Chaincode', () => {
     let Chaincode;
@@ -121,7 +118,7 @@ describe('Chaincode', () => {
             const args = chat.firstCall.args;
             expect(args.length).to.deep.equal(1);
             expect(typeof args[0]).to.deep.equal('object');
-            expect(args[0].type).to.deep.equal(peer.ChaincodeMessage.Type.REGISTER);
+            expect(args[0].type).to.deep.equal(fabprotos.protos.ChaincodeMessage.Type.REGISTER);
 
             chat.restore();
             getArgsStub.restore();
@@ -232,7 +229,7 @@ describe('Chaincode', () => {
                 const args = chat.firstCall.args;
                 expect(args.length).to.deep.equal(1);
                 expect(typeof args[0]).to.deep.equal('object');
-                expect(args[0].type).to.deep.equal(peer.ChaincodeMessage.Type.REGISTER);
+                expect(args[0].type).to.deep.equal(fabprotos.protos.ChaincodeMessage.Type.REGISTER);
 
                 chat.restore();
             });

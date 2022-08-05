@@ -1,16 +1,17 @@
 {
   "name": "fabric-nodeenv",
-  "version": "2.5.0-unstable",
+  "version": "2.2.4-unstable",
   "description": "",
   "main": "docker.js",
   "scripts": {
-    "build": "node docker.js"
+    "build": "gulp -f docker.js"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "git-rev-sync": "3.0.1",
-    "toolchain": "2.5.0-unstable"
+    "git-rev-sync": "1.12.0",
+    "gulp": "^4.0.0",
+    "toolchain": "1.0.0"
   }
 }

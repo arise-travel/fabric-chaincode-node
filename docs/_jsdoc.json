@@ -2,7 +2,6 @@
     "source": {
         "include": [
             "./_jsdoc/index.md",
-            "../libraries/fabric-ledger/lib/Ledger.js",
             "../libraries/fabric-shim/lib/chaincode.js",
             "../libraries/fabric-shim/lib/stub.js",
             "../libraries/fabric-shim/lib/iterators.js",
@@ -17,7 +16,7 @@
         "tutorials": "./_jsdoc/tutorials"
     },
     "templates": {
-        "systemName": "Hyperledger Fabric Contract API",
+        "systemName": "Hyperledger Fabric SDK for node.js",
         "theme": "cosmo",
         "default": {
             "staticFiles": {

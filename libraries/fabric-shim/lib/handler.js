@@ -8,8 +8,10 @@
 /* eslint-disable no-useless-escape */
 process.env.GRPC_SSL_CIPHER_SUITES = 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384';
 
+const protoLoader = require('@grpc/proto-loader');
 const grpc = require('@grpc/grpc-js');
-const {peer} = require('@hyperledger/fabric-protos');
+const fabprotos = require('../bundle');
+const path = require('path');
 const {URL} = require('url');
 const util = require('util');
 const StateQueryIterator = require('./iterators').StateQueryIterator;
@@ -28,14 +30,31 @@ const STATES = {
 
 // message types
 const MSG_TYPE = {
-    REGISTERED: peer.ChaincodeMessage.Type.REGISTERED,
-    READY: peer.ChaincodeMessage.Type.READY,
-    RESPONSE: peer.ChaincodeMessage.Type.RESPONSE,
-    ERROR: peer.ChaincodeMessage.Type.ERROR,
-    INIT: peer.ChaincodeMessage.Type.INIT,
-    TRANSACTION: peer.ChaincodeMessage.Type.TRANSACTION,
-    COMPLETED: peer.ChaincodeMessage.Type.COMPLETED,
+    REGISTERED: 'REGISTERED', 	// _serviceProto.ChaincodeMessage.Type.REGISTERED
+    READY: 'READY', 			// _serviceProto.ChaincodeMessage.Type.READY
+    RESPONSE: 'RESPONSE',		// _serviceProto.ChaincodeMessage.Type.RESPONSE
+    ERROR: 'ERROR',				// _serviceProto.ChaincodeMessage.Type.ERROR
+    INIT: 'INIT',				// _serviceProto.ChaincodeMessage.Type.INIT
+    TRANSACTION: 'TRANSACTION',	// _serviceProto.ChaincodeMessage.Type.TRANSACTION
+    COMPLETED: 'COMPLETED',		// _serviceProto.ChaincodeMessage.Type.COMPLETED
 };
+
+const PROTO_PATH = path.resolve(__dirname, '..', 'protos', 'peer', 'chaincode_shim.proto');
+const packageDefinition = protoLoader.loadSync(
+    PROTO_PATH,
+    {
+        keepCase: true,
+        longs: String,
+        enums: String,
+        defaults: true,
+        oneofs: true,
+        includeDirs: [
+            path.resolve(__dirname, '..', 'google-protos'),
+            path.resolve(__dirname, '..', 'protos')
+        ]
+    }
+);
+const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
 
 /*
  * Simple class to represent a message to be queued with the associated
@@ -54,7 +73,7 @@ class QMsg {
     }
 
     getMsgTxContextId() {
-        return this.msg.getChannelId() + this.msg.getTxid();
+        return this.msg.channel_id + this.msg.txid;
     }
 
     getMethod() {
@@ -86,11 +105,11 @@ class MsgQueueHandler {
     }
 
     /*
-     * Queue a message to be sent to the peer. If it is the first
-     * message on the queue then send the message to the peer
-     *
-     * @param {QMsg} qMsg the message to queue
-     */
+	 * Queue a message to be sent to the peer. If it is the first
+	 * message on the queue then send the message to the peer
+	 *
+	 * @param {QMsg} qMsg the message to queue
+	 */
     queueMsg(qMsg) {
         const txContextId = qMsg.getMsgTxContextId();
         let msgQueue = this.txQueues[txContextId];
@@ -105,14 +124,14 @@ class MsgQueueHandler {
     }
 
     /*
-     * Handle a response to a message. this looks at the top of
-     * the queue for the specific txn id to get the message this
-     * response is associated with so it can drive the promise waiting
-     * on this message response. it then removes that message from the
-     * queue and sends the next message on the queue if there is one.
-     *
-     * @param {any} response the received response
-     */
+	 * Handle a response to a message. this looks at the top of
+	 * the queue for the specific txn id to get the message this
+	 * response is associated with so it can drive the promise waiting
+	 * on this message response. it then removes that message from the
+	 * queue and sends the next message on the queue if there is one.
+	 *
+	 * @param {any} response the received response
+	 */
     handleMsgResponse(response) {
         const txId = response.txid;
         const channel_id = response.channel_id;
@@ -130,12 +149,12 @@ class MsgQueueHandler {
     }
 
     /**
-     * Get the current message.
-     * this returns the message at the top of the queue for the particular transaction.
-     *
-     * @param {string} txContextId - the transaction context id
-     * @returns {QMsg} the message at the top of the queue
-     */
+	 * Get the current message.
+	 * this returns the message at the top of the queue for the particular transaction.
+	 *
+	 * @param {string} txContextId - the transaction context id
+	 * @returns {QMsg} the message at the top of the queue
+	 */
     _getCurrentMsg(txContextId) {
         const msgQueue = this.txQueues[txContextId];
         if (msgQueue) {
@@ -150,11 +169,11 @@ class MsgQueueHandler {
     }
 
     /**
-     * Remove the current message and send the next message in the queue if there is one.
-     * delete the queue if there are no more messages.
-     *
-     * @param {any} txContextId - the transaction context id
-     */
+	 * Remove the current message and send the next message in the queue if there is one.
+	 * delete the queue if there are no more messages.
+	 *
+	 * @param {any} txContextId - the transaction context id
+	 */
     _removeCurrentAndSendNextMsg(txContextId) {
         const msgQueue = this.txQueues[txContextId];
         if (msgQueue && msgQueue.length > 0) {
@@ -168,10 +187,10 @@ class MsgQueueHandler {
     }
 
     /**
-     * send the current message to the peer.
-     *
-     * @param {any} txContextId the transaction context id
-     */
+	 * send the current message to the peer.
+	 *
+	 * @param {any} txContextId the transaction context id
+	 */
     _sendMsg(txContextId) {
         const qMsg = this._getCurrentMsg(txContextId);
         if (qMsg) {
@@ -191,20 +210,20 @@ class MsgQueueHandler {
 class ChaincodeSupportClient {
 
     /*
-     * Constructs an object with the endpoint configuration settings.
-     *
-     * @param {Object} chaincode The user-supplied object to handle chaincode interface calls Init() and Invoke()
-     * @param {string} url The peer URL with format of 'grpc(s)://host:port'
-     * @param {Object} opts An Object that may contain options to pass to grpcs calls
-     * <br>- pem {string} The certificate file, in PEM format,
-     *    to use with the gRPC protocol (that is, with TransportCredentials).
-     *    Required when using the grpcs protocol.
-     * <br>- ssl-target-name-override {string} Used in test environment only, when the server certificate's
-     *    hostname (in the 'CN' field) does not match the actual host endpoint that the server process runs
-     *    at, the application can work around the client TLS verify failure by setting this property to the
-     *    value of the server certificate's hostname
-     * <br>- any other standard grpc call options will be passed to the grpc service calls directly
-     */
+	 * Constructs an object with the endpoint configuration settings.
+	 *
+	 * @param {Object} chaincode The user-supplied object to handle chaincode interface calls Init() and Invoke()
+	 * @param {string} url The peer URL with format of 'grpc(s)://host:port'
+	 * @param {Object} opts An Object that may contain options to pass to grpcs calls
+	 * <br>- pem {string} The certificate file, in PEM format,
+	 *    to use with the gRPC protocol (that is, with TransportCredentials).
+	 *    Required when using the grpcs protocol.
+	 * <br>- ssl-target-name-override {string} Used in test environment only, when the server certificate's
+	 *    hostname (in the 'CN' field) does not match the actual host endpoint that the server process runs
+	 *    at, the application can work around the client TLS verify failure by setting this property to the
+	 *    value of the server certificate's hostname
+	 * <br>- any other standard grpc call options will be passed to the grpc service calls directly
+	 */
     constructor(chaincode, url, opts) {
         if (typeof chaincode !== 'object') {
             throw new Error('Missing required argument: chaincode');
@@ -243,9 +262,7 @@ class ChaincodeSupportClient {
             this._request_timeout = opts['request-timeout'];
         }
 
-        logger.info('Creating new Chaincode Support Client for peer comminications');
-        this._client = new peer.ChaincodeSupportClient(this._endpoint.addr, this._endpoint.creds, this._options);
-
+        this._client = new protoDescriptor.protos.ChaincodeSupport(this._endpoint.addr, this._endpoint.creds, this._options);
     }
 
     close() {
@@ -256,7 +273,7 @@ class ChaincodeSupportClient {
         this._stream = this._client.register();
 
         this._handler = new ChaincodeMessageHandler(this._stream, this.chaincode);
-        this._handler.chat(mapToChaincodeMessage(convStarterMsg));
+        this._handler.chat(convStarterMsg);
     }
 
     /*
@@ -264,9 +281,9 @@ class ChaincodeSupportClient {
      */
     toString() {
         return 'ChaincodeSupportClient : {' +
-            'url:' +
-            this._url +
-            '}';
+         'url:' +
+          this._url +
+           '}';
     }
 }
 
@@ -274,7 +291,7 @@ class ChaincodeSupportClient {
  * The ChaincodeMessageHandler class handles messages between peer and chaincode both in the chaincode server and client model.
  */
 class ChaincodeMessageHandler {
-    constructor(stream, chaincode) {
+    constructor (stream, chaincode) {
         this._stream = stream;
         this.chaincode = chaincode;
     }
@@ -292,9 +309,9 @@ class ChaincodeMessageHandler {
         // reject that response. The initial state is "created"
         let state = 'created';
 
-        stream.on('data', function (msgpb) {
-            const msg = mapFromChaincodeMessage(msgpb);
-            logger.debug(util.format('Received chat message from peer: %s, state: %s, type: %s', msg.txid, state, msg.type));
+        stream.on('data', function (msg) {
+            logger.debug('Received chat message from peer: %s, state: %s', msg.txid, state);
+
             if (state === STATES.Ready) {
                 const type = msg.type;
 
@@ -303,18 +320,17 @@ class ChaincodeMessageHandler {
                     const loggerPrefix = utils.generateLoggingPrefix(msg.channel_id, msg.txid);
 
                     if (type === MSG_TYPE.RESPONSE || type === MSG_TYPE.ERROR) {
-                        logger.debug(util.format('%s Received %s,  handling good or error response', loggerPrefix, msg.type));
+                        logger.debug('%s Received %s,  handling good or error response', loggerPrefix, msg.type);
                         self.msgQueueHandler.handleMsgResponse(msg);
                     } else if (type === MSG_TYPE.INIT) {
-                        logger.debug(util.format('%s Received %s, initializing chaincode', loggerPrefix, msg.type));
+                        logger.debug('%s Received %s, initializing chaincode', loggerPrefix, msg.type);
                         self.handleInit(msg);
                     } else if (type === MSG_TYPE.TRANSACTION) {
-                        logger.debug(util.format('%s Received %s, invoking transaction on chaincode(state:%s)', loggerPrefix, msg.type, state));
+                        logger.debug('%s Received %s, invoking transaction on chaincode(state:%s)', loggerPrefix, msg.type, state);
                         self.handleTransaction(msg);
                     } else {
                         logger.error('Received unknown message from the peer. Exiting.');
                         // TODO: Should we really do this ?
-                        // Yes
                         process.exit(1);
                     }
                 }
@@ -329,7 +345,7 @@ class ChaincodeMessageHandler {
                     // from the peer when in "established" state
                     // send an error message telling the peer about this
                     logger.error(util.format('Chaincode is in "ready" state, can only ' +
-                        'process messages of type "established", but received "%s"', msg.type));
+                     'process messages of type "established", but received "%s"', msg.type));
                     const errMsg = newErrorMsg(msg, state);
                     stream.write(errMsg);
                 }
@@ -344,7 +360,7 @@ class ChaincodeMessageHandler {
                     // from the peer when in "created" state
                     // send an error message telling the peer about this
                     logger.error(util.format('Chaincode is in "created" state, can only ' +
-                        'process messages of type "registered", but received "%s"', msg.type));
+                     'process messages of type "registered", but received "%s"', msg.type));
                     const errMsg = newErrorMsg(msg, state);
                     stream.write(errMsg);
                 }
@@ -362,7 +378,7 @@ class ChaincodeMessageHandler {
         });
 
         // now let's kick off the conversation already!
-        logger.debug('Sending chat message', convStarterMsg);
+        logger.debug('Sending chat message: %j', convStarterMsg);
         stream.write(convStarterMsg);
     }
 
@@ -375,219 +391,162 @@ class ChaincodeMessageHandler {
     }
 
     async handleGetState(collection, key, channel_id, txId) {
-        const msgPb = new peer.GetState();
-        msgPb.setKey(key);
-        msgPb.setCollection(collection);
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.GET_STATE,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.GET_STATE,
+            payload: fabprotos.protos.GetState.encode({key, collection}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         logger.debug('handleGetState - with key:', key);
         return await this._askPeerAndListen(msg, 'GetState');
     }
 
     async handlePutState(collection, key, value, channel_id, txId) {
-        const msgPb = new peer.PutState();
-        msgPb.setKey(key);
-        msgPb.setValue(value);
-        msgPb.setCollection(collection);
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.PUT_STATE,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.PUT_STATE,
+            payload: fabprotos.protos.PutState.encode({key, value, collection}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return await this._askPeerAndListen(msg, 'PutState');
     }
 
     async handleDeleteState(collection, key, channel_id, txId) {
-        const msgPb = new peer.DelState();
-        msgPb.setKey(key);
-        msgPb.setCollection(collection);
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.DEL_STATE,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.DEL_STATE,
+            payload: fabprotos.protos.DelState.encode({key, collection}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return await this._askPeerAndListen(msg, 'DeleteState');
     }
 
-    async handlePurgeState(collection, key, channel_id, txId) {
-        const msgPb = new peer.PurgePrivateState();
-        msgPb.setKey(key);
-        msgPb.setCollection(collection);
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.PURGE_PRIVATE_DATA,
-            payload: msgPb.serializeBinary(),
-            txid: txId,
-            channel_id: channel_id
-        });
-        return await this._askPeerAndListen(msg, 'PurgePrivateState');
-    }
-
     async handlePutStateMetadata(collection, key, metakey, ep, channel_id, txId) {
-        const msgPb = new peer.PutStateMetadata();
-        msgPb.setCollection(collection);
-        msgPb.setKey(key);
-
-        const metaPb = new peer.StateMetadata();
-        metaPb.setMetakey(metakey);
-        metaPb.setValue(ep);
-        msgPb.setMetadata(metaPb);
-
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.PUT_STATE_METADATA,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.PUT_STATE_METADATA,
+            payload: fabprotos.protos.PutStateMetadata.encode({
+                key,
+                collection,
+                metadata: {
+                    metakey,
+                    value: ep
+                }
+            }).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return this._askPeerAndListen(msg, 'PutStateMetadata');
     }
 
     async handleGetPrivateDataHash(collection, key, channel_id, txId) {
-        const msgPb = new peer.GetState();
-        msgPb.setKey(key);
-        msgPb.setCollection(collection);
-
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.GET_PRIVATE_DATA_HASH,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.GET_PRIVATE_DATA_HASH,
+            payload: fabprotos.protos.GetState.encode({key, collection}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return await this._askPeerAndListen(msg, 'GetPrivateDataHash');
     }
 
     async handleGetStateMetadata(collection, key, channel_id, txId) {
-        const msgPb = new peer.GetStateMetadata();
-        msgPb.setKey(key);
-        msgPb.setCollection(collection);
-
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.GET_STATE_METADATA,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.GET_STATE_METADATA,
+            payload: fabprotos.protos.GetStateMetadata.encode({key, collection}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return this._askPeerAndListen(msg, 'GetStateMetadata');
     }
 
     async handleGetStateByRange(collection, startKey, endKey, channel_id, txId, metadata) {
-
-        const msgPb = new peer.GetStateByRange();
-        msgPb.setStartkey(startKey);
-        msgPb.setEndkey(endKey);
-        msgPb.setCollection(collection);
-        msgPb.setMetadata(metadata);
-
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.GET_STATE_BY_RANGE,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.GET_STATE_BY_RANGE,
+            payload: fabprotos.protos.GetStateByRange.encode({startKey, endKey, collection, metadata}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return await this._askPeerAndListen(msg, 'GetStateByRange');
     }
 
     async handleQueryStateNext(id, channel_id, txId) {
-
-        const msgPb = new peer.QueryStateNext();
-        msgPb.setId(id);
-
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.QUERY_STATE_NEXT,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.QUERY_STATE_NEXT,
+            payload: fabprotos.protos.QueryStateNext.encode({id}).finish(),
             txid: txId,
             channel_id
-        });
+        };
         return await this._askPeerAndListen(msg, 'QueryStateNext');
     }
 
     async handleQueryStateClose(id, channel_id, txId) {
-
-        const msgPb = new peer.QueryStateClose();
-        msgPb.setId(id);
-
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.QUERY_STATE_CLOSE,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.QUERY_STATE_CLOSE,
+            payload: fabprotos.protos.QueryStateClose.encode({id}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return await this._askPeerAndListen(msg, 'QueryStateClose');
     }
 
     async handleGetQueryResult(collection, query, metadata, channel_id, txId) {
-        const msgPb = new peer.GetQueryResult();
-        msgPb.setCollection(collection);
-        msgPb.setQuery(query);
-        msgPb.setMetadata(metadata);
-
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.GET_QUERY_RESULT,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.GET_QUERY_RESULT,
+            payload: fabprotos.protos.GetQueryResult.encode({query, collection, metadata}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return await this._askPeerAndListen(msg, 'GetQueryResult');
     }
 
     async handleGetHistoryForKey(key, channel_id, txId) {
-        const msgPb = new peer.GetHistoryForKey();
-        msgPb.setKey(key);
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.GET_HISTORY_FOR_KEY,
-            payload: msgPb.serializeBinary(),
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.GET_HISTORY_FOR_KEY,
+            payload: fabprotos.protos.GetHistoryForKey.encode({key}).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
         return await this._askPeerAndListen(msg, 'GetHistoryForKey');
     }
 
     async handleInvokeChaincode(chaincodeName, args, channel_id, txId) {
-        const msgPb = new peer.ChaincodeSpec();
-        const chaincodeIdPb = new peer.ChaincodeID();
-        chaincodeIdPb.setName(chaincodeName);
-        msgPb.setChaincodeId(chaincodeIdPb);
-
-        const chaincodeInputPb = new peer.ChaincodeInput();
-        chaincodeInputPb.setArgsList(args.map((value) => Buffer.from(value)));
-        msgPb.setInput(chaincodeInputPb);
-
-        const msg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.INVOKE_CHAINCODE,
-            payload: msgPb.serializeBinary(),
+        const argsAsBuffers = args.map((arg) => Buffer.from(arg, 'utf8'));
+        const msg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.INVOKE_CHAINCODE,
+            payload: fabprotos.protos.ChaincodeSpec.encode({
+                chaincodeId: {
+                    name: chaincodeName
+                },
+                input: {
+                    args: argsAsBuffers
+                }
+            }).finish(),
             txid: txId,
             channel_id: channel_id
-        });
+        };
 
-        // this returns a peer.ChaincodeMessage
-        const chaincodeMsg = await this._askPeerAndListen(msg, 'InvokeChaincode');
-        const resp = peer.Response.deserializeBinary(chaincodeMsg.getPayload());
-        if (chaincodeMsg.getType() === MSG_TYPE.COMPLETED) {
-            return {
-                status : resp.getStatus(),
-                message: resp.getMessage(),
-                payload: Buffer.from(resp.getPayload())
-            };
-        } else {
-            throw new Error(resp.getMessage());
+        const message = await this._askPeerAndListen(msg, 'InvokeChaincode');
+        // here the message type comes back as an enumeration value rather than a string
+        // so need to use the enumerated value
+        if (message.type === fabprotos.protos.ChaincodeMessage.Type.COMPLETED) {
+            return fabprotos.protos.Response.decode(message.payload);
         }
 
+        // Catch the transaction and rethrow the data
+        if (message.type === fabprotos.protos.ChaincodeMessage.Type.ERROR) {
+            const errorData = message.payload.toString('utf8');
+            throw new Error(errorData);
+        }
     }
 
     /*
-     * send a message to the peer which returns a promise of the
-     * response.
-     *
-     * @param {string} msg the message to send to the peer
-     * @param {string} method the name of the method being called
-     * @returns {promise} returns a promise which is resolved with the response
-     * or is rejected otherwise
-     */
+	 * send a message to the peer which returns a promise of the
+	 * response.
+	 *
+	 * @param {string} msg the message to send to the peer
+	 * @param {string} method the name of the method being called
+	 * @returns {promise} returns a promise which is resolved with the response
+	 * or is rejected otherwise
+	 */
     _askPeerAndListen(msg, method) {
         return new Promise((resolve, reject) => {
             const qMsg = new QMsg(msg, method, resolve, reject);
@@ -603,49 +562,20 @@ class ChaincodeMessageHandler {
     }
 }
 
-// Two helper functions to map to and from the ProtoBuf structures to
-// plain JavaScript objects
-// in theory these should not be needed; however this was the path of least
-// resistence when refactoring to the new ProtoBuf API.
-//
-function mapToChaincodeMessage(msg) {
-    const msgPb = new peer.ChaincodeMessage();
-    msgPb.setType(msg.type);
-    msgPb.setPayload(msg.payload);
-    msgPb.setTxid(msg.txid);
-    msgPb.setChannelId(msg.channel_id);
-    msgPb.setChaincodeEvent(msg.chaincode_event);
-    return msgPb;
-}
-
-function mapFromChaincodeMessage(msgPb) {
-    return {
-        type: msgPb.getType(),
-        payload: Buffer.from(msgPb.getPayload_asU8()),
-        txid: msgPb.getTxid(),
-        channel_id: msgPb.getChannelId(),
-        proposal: msgPb.getProposal(),
-        chaincode_event: msgPb.getChaincodeEvent()
-    };
-}
-
-
 async function handleMessage(msg, client, action) {
-
     const loggerPrefix = utils.generateLoggingPrefix(msg.channel_id, msg.txid);
 
     let nextStateMsg, input;
     try {
-        input = peer.ChaincodeInput.deserializeBinary(msg.payload);
+        input = fabprotos.protos.ChaincodeInput.decode(msg.payload);
     } catch (err) {
         logger.error('%s Incorrect payload format. Sending ERROR message back to peer', loggerPrefix);
-        nextStateMsg = mapToChaincodeMessage({
-            type: peer.ChaincodeMessage.Type.ERROR,
+        nextStateMsg = {
+            type: fabprotos.protos.ChaincodeMessage.Type.ERROR,
             payload: msg.payload,
             txid: msg.txid,
-            channel_id: msg.channel_id
-        });
-
+            channel_id : msg.channel_id
+        };
     }
 
     if (input) {
@@ -654,13 +584,12 @@ async function handleMessage(msg, client, action) {
             stub = createStub(client, msg.channel_id, msg.txid, input, msg.proposal);
         } catch (err) {
             logger.error(util.format('Failed to construct a chaincode stub instance from the INIT message: %s', err));
-            nextStateMsg = mapToChaincodeMessage({
-                type: peer.ChaincodeMessage.Type.ERROR,
+            nextStateMsg = {
+                type: fabprotos.protos.ChaincodeMessage.Type.ERROR,
                 payload: Buffer.from(err.toString()),
                 txid: msg.txid,
-                channel_id: msg.channel_id
-            });
-
+                channel_id : msg.channel_id
+            };
             client._stream.write(nextStateMsg);
         }
 
@@ -673,9 +602,7 @@ async function handleMessage(msg, client, action) {
                 resp = await client.chaincode.Invoke(stub);
                 method = 'Invoke';
             }
-
             // check that a response object has been returned otherwise assume an error.
-
             if (!resp || !resp.status) {
                 const errMsg = util.format('%s Calling chaincode %s() has not called success or error.',
                     loggerPrefix, method);
@@ -686,41 +613,35 @@ async function handleMessage(msg, client, action) {
                     message: errMsg
                 };
             }
+
             logger.debug(util.format(
                 '%s Calling chaincode %s(), response status: %s',
                 loggerPrefix,
                 method,
                 resp.status));
 
-            const respPb = new peer.Response();
-            respPb.setMessage(resp.message);
-            respPb.setStatus(resp.status);
-            respPb.setPayload(resp.payload);
-
             if (resp.status >= Stub.RESPONSE_CODE.ERROR) {
-                const errMsg = util.format('%s Calling chaincode %s() returned error response [%s]. Sending COMPLETED message back to peer',
+                const errMsg = util.format('%s Calling chaincode %s() returned error response [%s]. Sending ERROR message back to peer',
                     loggerPrefix, method, resp.message);
                 logger.error(errMsg);
 
-                nextStateMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.COMPLETED,
-                    payload: respPb.serializeBinary(),
+                nextStateMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.ERROR,
+                    payload: Buffer.from('' + resp.message),
                     txid: msg.txid,
-                    channel_id: msg.channel_id,
-                    chaincode_event: stub.chaincodeEvent
-                });
-
+                    channel_id: msg.channel_id
+                };
             } else {
                 logger.info(util.format('%s Calling chaincode %s() succeeded. Sending COMPLETED message back to peer',
                     loggerPrefix, method));
 
-                nextStateMsg = mapToChaincodeMessage({
-                    type: peer.ChaincodeMessage.Type.COMPLETED,
-                    payload: respPb.serializeBinary(),
+                nextStateMsg = {
+                    type: fabprotos.protos.ChaincodeMessage.Type.COMPLETED,
+                    payload: fabprotos.protos.Response.encode(resp).finish(),
                     txid: msg.txid,
                     channel_id: msg.channel_id,
                     chaincode_event: stub.chaincodeEvent
-                });
+                };
             }
 
             client._stream.write(nextStateMsg);
@@ -756,17 +677,16 @@ function newErrorMsg(msg, state) {
     };
 }
 
-// Note the following handleXXX methods are to handle the *Peers* response to the Chaincode's original
-// handleXXX  request
 function handleGetQueryResult(handler, res, method) {
-
-    const payload = peer.QueryResponse.deserializeBinary(res.payload);
+    const payload = fabprotos.protos.QueryResponse.decode(res.payload);
     const iterator = new StateQueryIterator(handler, res.channel_id, res.txid, payload);
+
     const result = {iterator};
-    if (payload.getMetadata()) {
+
+    if (payload.metadata) {
         logger.debug(util.format('Received metadata for method: %s', method));
-        const metadata = peer.QueryResponseMetadata.deserializeBinary(payload.getMetadata());
-        result.metadata = {bookmark:metadata.getBookmark(), fetchedRecordsCount: metadata.getFetchedRecordsCount()};
+        const metadata = fabprotos.protos.QueryResponseMetadata.decode(payload.metadata);
+        result.metadata = metadata;
         logger.debug(util.format('metadata: %j', result.metadata));
     }
 
@@ -776,22 +696,17 @@ function handleGetQueryResult(handler, res, method) {
 function handleGetStateMetadata(payload) {
     const method = 'handleGetStateMetadata';
     logger.debug('%s - get response from peer.', method);
-    const decoded = peer.StateMetadataResult.deserializeBinary(payload);
+    const decoded = fabprotos.protos.StateMetadataResult.decode(payload);
     logger.debug('%s - decoded response:%j', method, decoded);
-    const entries = decoded.getEntriesList();
+    const entries = decoded.entries;
     const metadata = {};
 
     entries.forEach(entry => {
-        metadata[entry.getMetakey()] = entry.getValue();
+        metadata[entry.metakey] = entry.value;
     });
 
     logger.debug('%s - metadata: %j', method, metadata);
     return metadata;
-}
-
-function handleGetHistoryQueryResult(handler, res) {
-    const queryResponse = peer.QueryResponse.deserializeBinary(res.payload);
-    return new HistoryQueryIterator(handler, res.channel_id, res.txid, queryResponse);
 }
 
 function parseResponse(handler, res, method) {
@@ -807,19 +722,17 @@ function parseResponse(handler, res, method) {
             case 'GetQueryResult':
                 return handleGetQueryResult(handler, res, method);
             case 'GetHistoryForKey':
-                return handleGetHistoryQueryResult(handler, res);
+                return new HistoryQueryIterator(handler, res.channel_id, res.txid, fabprotos.protos.QueryResponse.decode(res.payload));
             case 'QueryStateNext':
             case 'QueryStateClose':
-                return peer.QueryResponse.deserializeBinary(res.payload);
-            case 'InvokeChaincode': {
-                const chaincodeMsg = peer.ChaincodeMessage.deserializeBinary(res.payload);
-                return chaincodeMsg;
-            }
+                return fabprotos.protos.QueryResponse.decode(res.payload);
+            case 'InvokeChaincode':
+                return fabprotos.protos.ChaincodeMessage.decode(res.payload);
             case 'GetStateMetadata':
                 return handleGetStateMetadata(res.payload);
         }
 
-        return Buffer.from(res.payload);
+        return res.payload;
     } else if (res.type === MSG_TYPE.ERROR) {
         logger.debug(util.format('%s Received %s() error response', loggerPrefix, method));
         throw new Error(res.payload.toString());

@@ -6,7 +6,7 @@
 /* eslint-disable no-useless-escape */
 'use strict';
 
-
+const fabprotos = require('../bundle');
 const util = require('util');
 const {Certificate} = require('@fidm/x509');
 const Logger = require('./logger');
@@ -20,8 +20,6 @@ const Iterators = require('./iterators');
 const ChaincodeStub = require('./stub');
 const KeyEndorsementPolicy = require('./utils/statebased');
 const fs = require('fs');
-
-const {peer} = require('@hyperledger/fabric-protos');
 
 const StartCommand = require('./cmds/startCommand.js');
 
@@ -106,7 +104,6 @@ class Shim {
         delete optsCpy['module-path'];
 
         const url = parsePeerUrl(opts['peer.address']);
-
         if (isTLS()) {
             logger.debug('TLS enabled');
             optsCpy.pem = fs.readFileSync(process.env.CORE_PEER_TLS_ROOTCERT_FILE).toString();
@@ -127,15 +124,15 @@ class Shim {
 
         const chaincodeName = opts['chaincode-id-name'];
         const client = new ChaincodeSupportClient(chaincode, url, optsCpy);
+        const chaincodeID = {
+            name: chaincodeName
+        };
 
         logger.info(util.format('Registering with peer %s as chaincode "%s"', opts['peer.address'], chaincodeName));
 
-        const chaincodePB = new peer.ChaincodeID();
-        chaincodePB.setName(chaincodeName);
-
         client.chat({
-            type: peer.ChaincodeMessage.Type.REGISTER,
-            payload: chaincodePB.serializeBinary()
+            type: fabprotos.protos.ChaincodeMessage.Type.REGISTER,
+            payload: fabprotos.protos.ChaincodeID.encode(chaincodeID).finish()
         });
 
         // return the client object to give the calling code
@@ -186,10 +183,10 @@ class Shim {
     }
 
     /**
-	 * Returns a winston logger named after <code>name</code>
+	 * Returns a log4js logger named after <code>name</code>
 	 * @static
 	 * @param {string} name Logger name used to label log messages produced by the returned logger
-	 * @returns {Object} winston based logger. See [winston]{@link https://github.com/winstonjs/winston} documentation for usage details
+	 * @returns {Object} log4js based logger. See log4js documentation for usage details
 	 */
     static newLogger(name) {
         if (!name) {
@@ -258,7 +255,7 @@ class ClientIdentity {
         this.mspId = signingId.mspid;
 
         this.idBytes = signingId.idBytes;
-        const normalizedCert = normalizeX509(new TextDecoder().decode(this.idBytes), loggerPrefix);
+        const normalizedCert = normalizeX509(this.idBytes.toString(), loggerPrefix);
 
         // assemble the unique ID based on certificate
         const certificate = Certificate.fromPEM(normalizedCert);

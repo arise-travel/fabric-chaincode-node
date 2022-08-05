@@ -1,9 +1,16 @@
 /*
- * Copyright contributors to Hyperledger Fabric.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * SPDX-License-Identifier: Apache-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
 /* global describe it beforeEach afterEach */
 'use strict';
 
@@ -34,6 +41,7 @@ const SystemContract = require(path.join('../../../', 'lib/contract-spi/systemco
 const StartCommand = require(path.join('../../../', 'lib/cmds/startCommand.js'));
 const ChaincodeFromContract = require(path.join('../../../', 'lib/contract-spi/chaincodefromcontract'));
 const shim = require(path.join('../../../', 'lib/chaincode'));
+
 const utils = require('../../../lib/utils/utils');
 
 const defaultSerialization = {
@@ -47,7 +55,6 @@ let betaStub;
 
 let beforeFnStubA;
 let afterFnStubA;
-let aroundFnStubA;
 let unknownStub;
 let privateStub;
 let ctxStub;
@@ -120,16 +127,12 @@ describe('chaincodefromcontract', () => {
             betaStub(api);
         }
 
-        async beforeTransaction(ctx) {
-            return beforeFnStubA(ctx);
-        }
-
         async afterTransaction(ctx) {
             return afterFnStubA(ctx);
         }
 
-        async aroundTransaction(ctx) {
-            return aroundFnStubA(ctx);
+        async beforeTransaction(ctx) {
+            return beforeFnStubA(ctx);
         }
 
         async unknownTransaction(ctx) {
@@ -171,7 +174,6 @@ describe('chaincodefromcontract', () => {
 
         beforeFnStubA = sandbox.stub().named('beforeFnStubA');
         afterFnStubA = sandbox.stub().named('afterFnStubA');
-        aroundFnStubA = sandbox.stub().named('aroundFnStubA');
         alphaStub = sandbox.stub().named('alphaStub');
         betaStub = sandbox.stub().named('betaStub');
         getSchemaMock = sandbox.stub();
@@ -469,6 +471,7 @@ describe('chaincodefromcontract', () => {
         });
 
         it('should pass the logging object to contracts', async () => {
+            let i=0;
             const idBytes = Buffer.from(certWithoutAttrs);
             const tempClass =  class  extends Contract {
                 constructor() {
@@ -483,6 +486,7 @@ describe('chaincodefromcontract', () => {
                     return alphaStub(ctx, arg1, arg2);
                 }
             };
+            
             const systemContract = new SystemContract();
             const appClass = new SCAlpha();
             sandbox.stub(ChaincodeFromContract.prototype, '_resolveContractImplementations')
@@ -503,6 +507,7 @@ describe('chaincodefromcontract', () => {
                         }
                     }
                 });
+            
             sandbox.stub(ChaincodeFromContract.prototype, '_checkAgainstSuppliedMetadata').returns([]);
             sandbox.stub(ChaincodeFromContract.prototype, '_compileSchemas');
 
@@ -510,7 +515,9 @@ describe('chaincodefromcontract', () => {
                 mspid: 'Org1MSP',
                 idBytes
             };
+         
             const cc = new ChaincodeFromContract([tempClass], defaultSerialization);
+         
             const mockStub = {getBufferArgs: sandbox.stub().returns(['logging:alpha']),
                 getTxID: sandbox.stub().returns('12345897asd7a7a77v7b77'),
                 getChannelID: sandbox.stub().returns('channel-id-fake'),
@@ -519,30 +526,33 @@ describe('chaincodefromcontract', () => {
 
             const levelSpy = sinon.spy(Logger, 'setLevel');
 
+
             let spyLogger = {
                 info: sinon.stub(),
                 debug: sinon.stub()
             }
             sandbox.stub(Logger,'getLogger').returns(spyLogger)
 
-
             await cc.Invoke(mockStub);
+
             const ctx = alphaStub.getCall(0).args[0];
+
             ctx.logging.setLevel('DEBUG');
             sinon.assert.called(levelSpy);
             sinon.assert.calledWith(levelSpy, 'DEBUG');
-            const cclogger = ctx.logging.getLogger();  
+
+            const cclogger = ctx.logging.getLogger();          
             cclogger.info('info');
             sinon.assert.calledWith(spyLogger.info, 'info');
 
             ctx.logging.setLevel('INFO');
             sinon.assert.called(levelSpy);
             sinon.assert.calledWith(levelSpy, 'INFO');
-
+            
             const cclogger_named = ctx.logging.getLogger("Named"); 
             cclogger_named.debug('Named logger');
             sinon.assert.calledWith(spyLogger.debug, 'Named logger');
-            
+
 
         });
     });
@@ -628,17 +638,19 @@ describe('chaincodefromcontract', () => {
                     return 'a channel id';
                 }
             };
+     
             try {
-                await cc.invokeFunctionality(mockStub);
+                 await cc.invokeFunctionality(mockStub);
             } catch (e){
-                // ok...
+                // ok....
             }
+        
             sinon.assert.called(fakeError);
             sinon.assert.notCalled(fakeSuccess);
 
         });
 
-        it ('should handle valid contract name, but missing function', async () => {
+        it('should handle valid contract name, but missing function', async () => {
 
             const idBytes = Buffer.from(certWithoutAttrs);
 
@@ -673,6 +685,7 @@ describe('chaincodefromcontract', () => {
                     'name': nameMetadata
                 }
             });
+
             const cc = new ChaincodeFromContract([SCAlpha], defaultSerialization);
             sinon.assert.calledOnce(ChaincodeFromContract.prototype._resolveContractImplementations);
             sinon.assert.calledOnce(_checkSuppliedStub);
@@ -693,8 +706,8 @@ describe('chaincodefromcontract', () => {
                 }
             };
             cc.contractImplementations.name = nameMetadata;
-
             await cc.invokeFunctionality(mockStub);
+           
             sinon.assert.called(fakeSuccess);
             sinon.assert.notCalled(fakeError);
 
@@ -760,7 +773,9 @@ describe('chaincodefromcontract', () => {
         });
 
         it('should handle valid contract name, with valid function', async () => {
+
             const idBytes = Buffer.from(certWithoutAttrs);
+
 
             const systemContract = new SystemContract();
             sandbox.stub(ChaincodeFromContract.prototype, '_resolveContractImplementations')
@@ -813,10 +828,6 @@ describe('chaincodefromcontract', () => {
                     {name: 'fn'}
                 ]
             };
-
-            // alias fn with aroundTransaction as Contract instance is not accessible
-            const contractInstance = cc.contractImplementations.name.contractInstance;
-            contractInstance.aroundTransaction = contractInstance.fn;
 
             cc.metadata.contracts = {
                 name: {
@@ -889,10 +900,6 @@ describe('chaincodefromcontract', () => {
                     },
                 ]
             };
-
-            // alias fn with aroundTransaction as Contract instance is not accessible
-            const contractInstance = cc.contractImplementations.name.contractInstance;
-            contractInstance.aroundTransaction = contractInstance.fn;
 
             cc.metadata.contracts = {
                 name: {
@@ -1164,7 +1171,7 @@ describe('chaincodefromcontract', () => {
         });
     });
 
-    describe ('#_augmentMetadataFromCode', () => {
+    describe('#_augmentMetadataFromCode', () => {
         const exampleMetadata = {
             $schema: 'my schema link',
             contracts: {
@@ -1219,7 +1226,7 @@ describe('chaincodefromcontract', () => {
             const metadata = fakeCcfc._augmentMetadataFromCode(partialMetadata);
 
             const correctData = {
-                '$schema': 'https://hyperledger.github.io/fabric-chaincode-node/main/api/contract-schema.json',
+                '$schema': 'https://hyperledger.github.io/fabric-chaincode-node/release-2.1/api/contract-schema.json',
                 'components': {
                     'schemas': {}
                 },
@@ -1354,7 +1361,7 @@ describe('chaincodefromcontract', () => {
             metadata.components.should.deep.equal(metadataToSend.components);
             metadata.contracts.should.deep.equal(metadataToSend.contracts);
             metadata.info.should.deep.equal(metadataToSend.info);
-            metadata.$schema.should.deep.equal('https://hyperledger.github.io/fabric-chaincode-node/main/api/contract-schema.json');
+            metadata.$schema.should.deep.equal('https://hyperledger.github.io/fabric-chaincode-node/release-2.1/api/contract-schema.json');
         });
     });
 

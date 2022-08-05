@@ -1,9 +1,3 @@
-/*
- * Copyright contributors to Hyperledger Fabric.
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 const path = require('path');
 
 const ordererCA = '/test-network/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem';
@@ -21,8 +15,8 @@ exports.getTLSArgs = () => {
 
 exports.getPeerAddresses = () => {
     if (tls) {
-        return '--peerAddresses peer0.org1.example.com:7051 --tlsRootCertFiles ' + org1CA +
-            ' --peerAddresses peer0.org2.example.com:8051 --tlsRootCertFiles ' + org2CA;
+        return '--peerAddresses peer0.org1.example.com:7051 --tlsRootCertFile ' + org1CA +
+            ' --peerAddresses peer0.org2.example.com:8051 --tlsRootCertFile ' + org2CA;
     } else {
         return '--peerAddresses peer0.org1.example.com:7051' +
             ' --peerAddresses peer0.org2.example.com:8051';

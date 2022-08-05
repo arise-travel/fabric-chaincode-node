@@ -6,9 +6,8 @@
 
 'use strict';
 
+const fabprotos = require('../bundle');
 const logger = require('./logger').getLogger('lib/iterators.js');
-
-const {ledger} = require('@hyperledger/fabric-protos');
 
 /**
  * CommonIterator allows a chaincode to check whether any more result(s)
@@ -35,8 +34,6 @@ class CommonIterator {
         this.handler = handler;
         this.channel_id = channel_id;
         this.txID = txID;
-
-        // this response is a peer.QueryResponse object
         this.response = response;
         this.currentLoc = 0;
     }
@@ -49,7 +46,7 @@ class CommonIterator {
 	 */
     async close() {
         logger.debug('close called on %s iterator for txid: %s', this.type, this.txID);
-        return await this.handler.handleQueryStateClose(this.response.getId(), this.channel_id, this.txID);
+        return await this.handler.handleQueryStateClose(this.response.id, this.channel_id, this.txID);
     }
 
     /*
@@ -58,9 +55,9 @@ class CommonIterator {
 	 */
     _getResultFromBytes(bytes) {
         if (this.type === 'QUERY') {
-            return ledger.queryresult.KV.deserializeBinary(bytes.getResultbytes());
+            return fabprotos.queryresult.KV.decode(bytes.resultBytes);
         } else if (this.type === 'HISTORY') {
-            return ledger.queryresult.KeyModification.deserializeBinary(bytes.getResultbytes());
+            return fabprotos.queryresult.KeyModification.decode(bytes.resultBytes);
         }
         throw new Error('Iterator constructed with unknown type: ' + this.type);
     }
@@ -71,16 +68,7 @@ class CommonIterator {
 	 */
     _createAndEmitResult() {
         const queryResult = {};
-        const resultsList = this.response.getResultsList();
-
-        const queryResultPb = this._getResultFromBytes(resultsList[this.currentLoc]);
-        queryResult.value = {value:Buffer.from(queryResultPb.getValue())};
-        /* istanbul ignore else*/
-        if ('getKey' in queryResultPb) {
-            queryResult.value.key = Buffer.from(queryResultPb.getKey()).toString();
-        }
-
-
+        queryResult.value = this._getResultFromBytes(this.response.results[this.currentLoc]);
         this.currentLoc++;
 
         queryResult.done = false;
@@ -96,14 +84,13 @@ class CommonIterator {
 	 */
     async next() {
         // check to see if there are some results left in the current result set
-        const resultsList = this.response.getResultsList();
-        if (this.currentLoc < resultsList.length) {
+        if (this.currentLoc < this.response.results.length) {
             return this._createAndEmitResult();
         } else {
             // check to see if there is more and go fetch it
-            if (this.response.getHasMore()) {
+            if (this.response.hasMore) {
                 try {
-                    const response = await this.handler.handleQueryStateNext(this.response.getId(), this.channel_id, this.txID);
+                    const response = await this.handler.handleQueryStateNext(this.response.id, this.channel_id, this.txID);
                     this.currentLoc = 0;
                     this.response = response;
                     return this._createAndEmitResult();

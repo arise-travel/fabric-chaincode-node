@@ -10,7 +10,7 @@ in various programming languages. There are two other smart contract SDKs availa
 
 ## Documentation
 
-Detailed explanation on the concepts and programming model for smart contracts can be found in the [Smart Contracts and Chaincode section in the Hyperledger Fabric documentation](https://hyperledger-fabric.readthedocs.io/en/latest/smartcontract/smartcontract.html).
+Detailed explanation on the concepts and programming model for smart contracts can be found in the [Smart Contracts and Chaincode section in the Hyperledger Fabric documentation](https://hyperledger-fabric.readthedocs.io/en/release-2.1/smartcontract/smartcontract.html).
 
 API documentation is available for each release:
 
@@ -23,6 +23,7 @@ The following packages are available from the npm Registry:
 - [fabric-contract-api](https://www.npmjs.com/package/fabric-contract-api)
 - [fabric-shim](https://www.npmjs.com/package/fabric-shim)
 - [fabric-shim-api](https://www.npmjs.com/package/fabric-shim-api)
+- [fabric-shim-crypto](https://www.npmjs.com/package/fabric-shim-crypto)
 
 Check the [release notes](https://github.com/hyperledger/fabric-chaincode-node/releases) for the changes in each version.
 

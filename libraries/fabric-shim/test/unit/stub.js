@@ -3,16 +3,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 */
-/* global */
+/* global describe it beforeEach afterEach after  */
 
 const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('chai-as-promised'));
-// chai.config.truncateThreshold = 0;
 const expect = chai.expect;
 const rewire = require('rewire');
+const fabprotos = require('../../bundle');
 
-const {peer, msp, common} = require('@hyperledger/fabric-protos');
 const Stub = rewire('../../lib/stub.js');
 
 class DummyIterator {
@@ -69,24 +68,19 @@ describe('Stub', () => {
                     header: {
                         signatureHeader: {
                             nonce: Buffer.from('100'),
-                            creator_u8: Buffer.from('some creator')
+                            creator: Buffer.from('some creator')
                         },
                         channelHeader: {
-                            getEpoch: () => {
-                                return {high: 10, low: 1};
+                            epoch: {
+                                high: 10,
+                                low: 1
                             }
                         }
                     }
                 }
             };
 
-
-            expect(computeProposalBinding(decodedSP)).to.deep.equal('44206e945c5cc2b752deacc05b2d6cd58a3799fec52143c986739bab57417aaf');
-            // note to future developers, there is some confusion over the exact use of this value and how critical it is to keep
-            // it consitent between releases. The previous tests had the value 'ff7e9beabf035d45cb5922278f423ba92f1e85d43d54c2304038f2f2b131625b')
-            // for logically the same input; however it is believed that included 'bits of the old protobuf' library.
-            // we therefore consider this update to be valid
-
+            expect(computeProposalBinding(decodedSP)).to.deep.equal('ff7e9beabf035d45cb5922278f423ba92f1e85d43d54c2304038f2f2b131625b');
         });
     });
 
@@ -215,14 +209,48 @@ describe('Stub', () => {
         const buf2 = Buffer.from('someKey');
         const buf3 = Buffer.from('someValue');
 
-        const chaincodeInput = {
-            getArgsList_asU8 : () => {
-                return [buf1, buf2, buf3];
+        const decodedProposal = {
+            header: Buffer.from('some header'),
+            payload: Buffer.from('some payload')
+        };
+
+        const decodedCCPP = {
+            TransientMap: {
+                key1: 'value1',
+                key2: 'value2'
             }
         };
 
-        beforeEach(() => {
+        const decodedHeader = {
+            signatureHeader: 'some signature header',
+            channelHeader: 'somne channel header'
+        };
 
+        const decodedSigHeader = {
+            nonce: Buffer.from('some nonce'),
+            creator: 'some creator'
+        };
+
+        const decodedChannelHeader = {
+            timestamp: 'some timestamp'
+        };
+
+        let _proposalProtoProposalDecodeStub;
+        let _proposalProtoChaincodeProposalPayloadDecodeStub;
+        let _commonProtoHeaderDecodeStub;
+        let _commonProtoSignatureHeaderDecodeStub;
+        let _commonProtoChannelHeaderDecodeStub;
+        let _idProtoSerializedIdentityDecodeStub;
+
+        beforeEach(() => {
+            _proposalProtoProposalDecodeStub = sandbox.stub(fabprotos.protos.Proposal, 'decode').returns(decodedProposal);
+            _proposalProtoChaincodeProposalPayloadDecodeStub = sandbox.stub(fabprotos.protos.ChaincodeProposalPayload, 'decode').returns(decodedCCPP);
+
+            _commonProtoHeaderDecodeStub = sandbox.stub(fabprotos.common.Header, 'decode').returns(decodedHeader);
+            _commonProtoSignatureHeaderDecodeStub = sandbox.stub(fabprotos.common.SignatureHeader, 'decode').returns(decodedSigHeader);
+            _commonProtoChannelHeaderDecodeStub = sandbox.stub(fabprotos.common.ChannelHeader, 'decode').returns(decodedChannelHeader);
+
+            _idProtoSerializedIdentityDecodeStub = sandbox.stub(fabprotos.msp.SerializedIdentity, 'decode').returns('some creator');
         });
 
         afterEach(() => {
@@ -230,7 +258,9 @@ describe('Stub', () => {
         });
 
         it ('should set up the vars and do nothing more with no signed proposal', () => {
-            const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+            const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                args: [buf1, buf2, buf3]
+            });
 
             expect(stub.handler).to.deep.equal('dummyClient');
             expect(stub.channel_id).to.deep.equal('dummyChannelId');
@@ -239,182 +269,172 @@ describe('Stub', () => {
         });
 
         it ('should throw an error for an invalid proposal', () => {
-            const badSignedProposal = {
-                getSignature: () => {
-                    return 'sig';
-                },
-                getProposalBytes: sandbox.stub().throws()
-            };
-
+            _proposalProtoProposalDecodeStub.restore();
+            _proposalProtoProposalDecodeStub = sandbox.stub(fabprotos.protos.Proposal, 'decode').throws();
 
             expect(() => {
-                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, badSignedProposal);
+                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                }, 'badProposal');
             }).to.throw(/Failed extracting proposal from signedProposal/);
         });
 
         it ('should throw an error for a proposal with an empty header', () => {
-
-            const signedPb = new peer.SignedProposal();
-            signedPb.setProposalBytes('');
+            _proposalProtoProposalDecodeStub.restore();
+            _proposalProtoProposalDecodeStub = sandbox.stub(fabprotos.protos.Proposal, 'decode').returns({});
 
             expect(() => {
-                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, signedPb);
+                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                }, {
+                    signature: 'some signature',
+                    proposal_bytes: 'some bytes'
+                });
             }).to.throw(/Proposal header is empty/);
         });
 
-        it('should throw an error for a proposal with an empty payload', () => {
-
-            const proposalPB = new peer.Proposal();
-            proposalPB.setHeader('something');
-            proposalPB.setPayload('');
-
-            const signedPb = new peer.SignedProposal();
-            signedPb.setProposalBytes(proposalPB.serializeBinary());
+        it ('should throw an error for a proposal with an empty payload', () => {
+            _proposalProtoProposalDecodeStub.restore();
+            _proposalProtoProposalDecodeStub = sandbox.stub(fabprotos.protos.Proposal, 'decode').returns({header: decodedProposal.header});
 
             expect(() => {
-                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, signedPb);
+                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                }, {
+                    signature: 'some signature',
+                    proposal_bytes: 'some bytes'
+                });
             }).to.throw(/Proposal payload is empty/);
         });
 
         it ('should throw an error for a proposal with an invalid header', () => {
-
-            const proposalPB = new peer.Proposal();
-            proposalPB.setHeader('something');
-            proposalPB.setPayload('wibble');
-
-            const signedPb = new peer.SignedProposal();
-            signedPb.setProposalBytes(proposalPB.serializeBinary());
+            _commonProtoHeaderDecodeStub.restore();
+            _commonProtoHeaderDecodeStub = sandbox.stub(fabprotos.common.Header, 'decode').throws();
 
             expect(() => {
-                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, signedPb);
+                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                }, {
+                    signature: 'some signature',
+                    proposal_bytes: 'some bytes'
+                });
             }).to.throw(/Could not extract the header from the proposal/);
         });
 
-        it('should throw an error for a proposal with an invalid signature header', () => {
-
-            const headerPB = new common.Header();
-            headerPB.setSignatureHeader('Something');
-
-            const proposalPB = new peer.Proposal();
-            proposalPB.setHeader(headerPB.serializeBinary());
-            proposalPB.setPayload('wibble');
-
-            const signedPb = new peer.SignedProposal();
-            signedPb.setProposalBytes(proposalPB.serializeBinary());
+        it ('should throw an error for a proposal with an invalid signature header', () => {
+            _commonProtoSignatureHeaderDecodeStub.restore();
+            _commonProtoSignatureHeaderDecodeStub = sandbox.stub(fabprotos.common.SignatureHeader, 'decode').throws();
 
             expect(() => {
-                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, signedPb);
+                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                }, {
+                    signature: 'some signature',
+                    proposal_bytes: 'some bytes'
+                });
             }).to.throw(/Decoding SignatureHeader failed/);
         });
 
         it ('should throw an error for a proposal with an invalid creator', () => {
+            _idProtoSerializedIdentityDecodeStub.restore();
+            _idProtoSerializedIdentityDecodeStub = sandbox.stub(fabprotos.msp.SerializedIdentity, 'decode').throws();
 
-            const signatureHeaderPB = new common.SignatureHeader();
-            signatureHeaderPB.setCreator('something');
-
-            const headerPB = new common.Header();
-            headerPB.setSignatureHeader(signatureHeaderPB.serializeBinary());
-
-
-            const proposalPB = new peer.Proposal();
-            proposalPB.setHeader(headerPB.serializeBinary());
-            proposalPB.setPayload('wibble');
-
-            const signedPb = new peer.SignedProposal();
-            signedPb.setProposalBytes(proposalPB.serializeBinary());
             expect(() => {
-                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, signedPb);
+                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                }, {
+                    signature: 'some signature',
+                    proposal_bytes: 'some bytes'
+                });
             }).to.throw(/Decoding SerializedIdentity failed/);
         });
 
         it ('should throw an error for a proposal with an invalid channelHeader', () => {
+            _commonProtoChannelHeaderDecodeStub.restore();
+            _commonProtoChannelHeaderDecodeStub = sandbox.stub(fabprotos.common.ChannelHeader, 'decode').throws();
 
-            const creatorPB = new msp.SerializedIdentity();
-            creatorPB.setMspid('mspid');
-            creatorPB.setIdBytes(Buffer.from('x509'));
-
-            const signatureHeaderPB = new common.SignatureHeader();
-            signatureHeaderPB.setCreator(creatorPB.serializeBinary());
-
-            const headerPB = new common.Header();
-            headerPB.setSignatureHeader(signatureHeaderPB.serializeBinary());
-            headerPB.setChannelHeader('something');
-
-            const proposalPB = new peer.Proposal();
-            proposalPB.setHeader(headerPB.serializeBinary());
-
-            proposalPB.setPayload('wibble');
-
-            const signedPb = new peer.SignedProposal();
-            signedPb.setProposalBytes(proposalPB.serializeBinary());
             expect(() => {
-                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, signedPb);
+                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                }, {
+                    signature: 'some signature',
+                    proposal_bytes: 'some bytes'
+                });
             }).to.throw(/Decoding ChannelHeader failed/);
         });
 
-        it('should throw an error for a proposal with an invalid payload', () => {
-            const creatorPB = new msp.SerializedIdentity();
-            creatorPB.setMspid('mspid');
-            creatorPB.setIdBytes(Buffer.from('x509'));
-
-            const signatureHeaderPB = new common.SignatureHeader();
-            signatureHeaderPB.setCreator(creatorPB.serializeBinary());
-
-            const headerPB = new common.Header();
-            headerPB.setSignatureHeader(signatureHeaderPB.serializeBinary());
-
-            const channelHeaderPB = new common.ChannelHeader();
-
-            headerPB.setChannelHeader(channelHeaderPB.serializeBinary());
-
-            const proposalPB = new peer.Proposal();
-            proposalPB.setHeader(headerPB.serializeBinary());
-            proposalPB.setPayload('wibble');
-
-            const signedPb = new peer.SignedProposal();
-            signedPb.setProposalBytes(proposalPB.serializeBinary());
+        it ('should throw an error for a proposal with an invalid payload', () => {
+            _proposalProtoChaincodeProposalPayloadDecodeStub.restore();
+            sandbox.stub(fabprotos.protos.ChaincodeProposalPayload, 'decode').throws();
 
             expect(() => {
-                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, signedPb);
+                new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                }, {
+                    signature: 'some signature',
+                    proposal_bytes: 'some bytes'
+                });
             }).to.throw(/Decoding ChaincodeProposalPayload failed/);
         });
 
-        it('should correctly create the stub', () => {
-            const creatorPB = new msp.SerializedIdentity();
-            creatorPB.setMspid('mspid');
-            creatorPB.setIdBytes(Buffer.from('x509'));
+        it('should set all the env vars with a valid signed proposal', () => {
+            const saveComputeProposalBinding = Stub.__get__('computeProposalBinding');
 
-            const signatureHeaderPB = new common.SignatureHeader();
-            signatureHeaderPB.setCreator(creatorPB.serializeBinary());
+            const mockComputeProposalBinding = sinon.stub().returns('some proposal binding');
+            Stub.__set__('computeProposalBinding', mockComputeProposalBinding);
 
-            const headerPB = new common.Header();
-            headerPB.setSignatureHeader(signatureHeaderPB.serializeBinary());
+            const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                args: [buf1, buf2, buf3]
+            }, {
+                signature: 'some signature',
+                proposal_bytes: 'some bytes'
+            });
 
-            const channelHeaderPB = new common.ChannelHeader();
+            expect(stub.handler).to.deep.equal('dummyClient');
+            expect(stub.channel_id).to.deep.equal('dummyChannelId');
+            expect(stub.txId).to.deep.equal('dummyTxid');
+            expect(stub.args).to.deep.equal(['invoke', 'someKey', 'someValue']);
+            expect(stub.proposal).to.deep.equal(decodedProposal);
+            expect(stub.txTimestamp).to.deep.equal('some timestamp');
+            expect(stub.creator).to.deep.equal('some creator');
+            expect(stub.transientMap.get('key1')).to.equal('value1');
+            expect(stub.transientMap.get('key2')).to.equal('value2');
+            expect(stub.signedProposal).to.deep.equal({
+                signature: 'some signature',
+                proposal: {
+                    header: {
+                        signatureHeader: {
+                            creator: 'some creator',
+                            nonce: Buffer.from('some nonce')
+                        },
+                        channelHeader: decodedChannelHeader
+                    },
+                    payload: decodedCCPP
+                }
+            });
+            expect(stub.binding).to.deep.equal('some proposal binding');
 
-            headerPB.setChannelHeader(channelHeaderPB.serializeBinary());
+            expect(_proposalProtoProposalDecodeStub.calledOnce).to.be.true;
+            expect(_proposalProtoProposalDecodeStub.firstCall.args).to.deep.equal(['some bytes']);
+            expect(_commonProtoHeaderDecodeStub.calledOnce).to.be.true;
+            expect(_commonProtoHeaderDecodeStub.firstCall.args).to.deep.equal([decodedProposal.header]);
+            expect(_commonProtoSignatureHeaderDecodeStub.calledOnce).to.be.true;
+            expect(_commonProtoSignatureHeaderDecodeStub.firstCall.args).to.deep.equal([decodedHeader.signatureHeader]);
+            expect(_idProtoSerializedIdentityDecodeStub.calledOnce).to.be.true;
+            expect(_idProtoSerializedIdentityDecodeStub.firstCall.args).to.deep.equal([decodedSigHeader.creator]);
+            expect(_commonProtoChannelHeaderDecodeStub.calledOnce).to.be.true;
+            expect(_commonProtoChannelHeaderDecodeStub.firstCall.args).to.deep.equal([decodedHeader.channelHeader]);
+            expect(_proposalProtoChaincodeProposalPayloadDecodeStub.calledOnce).to.be.true;
+            expect(_proposalProtoChaincodeProposalPayloadDecodeStub.firstCall.args).to.deep.equal([decodedProposal.payload]);
 
-            const ccpp = new peer.ChaincodeProposalPayload();
-            ccpp.setInput('wibble');
-            const map = ccpp.getTransientmapMap();
-            map.set('key', 'value');
-
-
-            const proposalPB = new peer.Proposal();
-            proposalPB.setHeader(headerPB.serializeBinary());
-            proposalPB.setPayload(ccpp.serializeBinary());
-
-            const signedPb = new peer.SignedProposal();
-            signedPb.setProposalBytes(proposalPB.serializeBinary());
-
-
-            new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput, signedPb);
-
+            Stub.__set__('computeProposalBinding', saveComputeProposalBinding);
         });
 
         describe('getArgs', () => {
             it ('should return the args', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                });
 
                 expect(stub.getArgs()).to.deep.equal(['invoke', 'someKey', 'someValue']);
             });
@@ -422,7 +442,9 @@ describe('Stub', () => {
 
         describe('getStringArgs', () => {
             it ('should return the args', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                });
 
                 expect(stub.getStringArgs()).to.deep.equal(['invoke', 'someKey', 'someValue']);
             });
@@ -430,7 +452,9 @@ describe('Stub', () => {
 
         describe('getBufferArgs', () => {
             it ('should return the args', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                });
 
                 expect(stub.getBufferArgs()).to.deep.equal([buf1, buf2, buf3]);
             });
@@ -438,7 +462,9 @@ describe('Stub', () => {
 
         describe('getFunctionAndParameters', () => {
             it ('should return the function name parameters', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1, buf2, buf3]
+                });
 
                 expect(stub.getFunctionAndParameters()).to.deep.equal({
                     fcn: 'invoke',
@@ -447,10 +473,8 @@ describe('Stub', () => {
             });
 
             it ('should return string for function and empty array as param if only one arg', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid',  {
-                    getArgsList_asU8 : () => {
-                        return [buf1];
-                    }
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: [buf1]
                 });
 
                 expect(stub.getFunctionAndParameters()).to.deep.equal({
@@ -460,10 +484,8 @@ describe('Stub', () => {
             });
 
             it ('should return empty string for function and empty array for params if no args', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid',  {
-                    getArgsList_asU8 : () => {
-                        return [];
-                    }
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
                 });
 
                 expect(stub.getFunctionAndParameters()).to.deep.equal({
@@ -475,7 +497,9 @@ describe('Stub', () => {
 
         describe('getTxID', () => {
             it ('should return txId', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 expect(stub.getTxID()).to.deep.equal('dummyTxid');
             });
@@ -483,7 +507,9 @@ describe('Stub', () => {
 
         describe('getChannelID', () => {
             it ('should return channel_id', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 expect(stub.getChannelID()).to.deep.equal('dummyChannelId');
             });
@@ -491,7 +517,9 @@ describe('Stub', () => {
 
         describe('getCreator', () => {
             it ('should return creator', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 stub.creator = 'some creator';
 
@@ -507,7 +535,7 @@ describe('Stub', () => {
                     mspID = process.env.CORE_PEER_LOCALMSPID;
                 }
             });
-
+    
             afterEach(() => {
                 delete process.env.CORE_PEER_LOCALMSPID;
                 if (mspID) {
@@ -518,23 +546,29 @@ describe('Stub', () => {
             it ('should return MSPID', () => {
                 process.env.CORE_PEER_LOCALMSPID = 'some MSPID';
 
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 expect(stub.getMspID()).to.deep.equal('some MSPID');
             });
 
             it ('should throw Error if MSPID is not available', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 expect(() => {
-                    stub.getMspID();
+                    stub.getMspID()
                 }).to.throw('CORE_PEER_LOCALMSPID is unset in chaincode process');
             });
         });
 
         describe('getTransient', () => {
             it ('should return transient map', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 stub.transientMap = 'some transient map';
 
@@ -544,7 +578,9 @@ describe('Stub', () => {
 
         describe('getSignedProposal', () => {
             it ('should return signed proposal', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 stub.signedProposal = 'some signed proposal';
 
@@ -554,7 +590,9 @@ describe('Stub', () => {
 
         describe('getTxTimestamp', () => {
             it ('should return transaction timestamp', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 stub.txTimestamp = 'some timestamp';
 
@@ -564,7 +602,9 @@ describe('Stub', () => {
 
         describe('getDateTimestamp', () => {
             it ('should return transaction date as Node.js Date object', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
                 stub.txTimestamp = {seconds: 1606233385, nanos: 54000000};
 
                 expect(stub.getDateTimestamp()).to.deep.equal(new Date(1606233385054));
@@ -573,7 +613,9 @@ describe('Stub', () => {
 
         describe('getBinding', () => {
             it ('should return binding', () => {
-                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                const stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 stub.binding = 'some binding';
 
@@ -587,7 +629,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetState: handleGetStateStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getState('a key');
 
@@ -603,7 +647,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handlePutState: handlePutStateStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.putState('a key', 'a value');
 
@@ -616,7 +662,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handlePutState: handlePutStateStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.putState('a key', {a:'value'});
 
@@ -632,7 +680,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleDeleteState: handleDeleteStateStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.deleteState('a key');
 
@@ -647,7 +697,9 @@ describe('Stub', () => {
                 const handlePutStateMetadataStub = sinon.stub().resolves('nothing');
                 const stub = new Stub({
                     handlePutStateMetadata: handlePutStateMetadataStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
                 const ep = Buffer.from('someEndorsementPolicy');
 
                 const nothing = await stub.setStateValidationParameter('aKey', ep);
@@ -662,7 +714,9 @@ describe('Stub', () => {
                 const handleGetStateMetadataStub = sinon.stub().resolves({VALIDATION_PARAMETER: 'some metadata'});
                 const stub = new Stub({
                     handleGetStateMetadata: handleGetStateMetadataStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
                 const ep = await stub.getStateValidationParameter('aKey');
                 expect(ep).to.deep.equal('some metadata');
                 sinon.assert.calledOnce(handleGetStateMetadataStub);
@@ -676,7 +730,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getStateByRange('start key', 'end key');
 
@@ -690,7 +746,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const EMPTY_KEY_SUBSTITUTE = Stub.__get__('EMPTY_KEY_SUBSTITUTE');
 
@@ -706,7 +764,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const compositeStartKey = stub.createCompositeKey('obj', ['attr1']);
                 expect(stub.getStateByRange(compositeStartKey, 'end key'))
@@ -723,7 +783,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const compositeStartKey = stub.createCompositeKey('obj', ['attr1']);
                 expect(stub.getStateByRangeWithPagination(compositeStartKey, 'end key', 3, ''))
@@ -739,18 +801,18 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getStateByRangeWithPagination(null, 'end key', 3);
 
                 expect(result).to.deep.equal('some state');
                 expect(handleGetStateByRangeStub.calledOnce).to.be.true;
-
-                const metaPb = new peer.QueryResponseMetadata();
-                metaPb.setBookmark('');
-                metaPb.setFetchedRecordsCount(3);
-
-                const metadataBuffer = metaPb.serializeBinary();
+                const metadataBuffer = fabprotos.protos.QueryResponseMetadata.encode({
+                    bookmark: '',
+                    fetchedRecordsCount: 3
+                }).finish();
                 expect(handleGetStateByRangeStub.firstCall.args).to.deep.equal(['', EMPTY_KEY_SUBSTITUTE, 'end key', 'dummyChannelId', 'dummyTxid', metadataBuffer]);
             });
 
@@ -759,18 +821,18 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getStateByRangeWithPagination('start key', 'end key', 3);
 
                 expect(result).to.deep.equal('some state');
                 expect(handleGetStateByRangeStub.calledOnce).to.be.true;
-
-                const metaPb = new peer.QueryResponseMetadata();
-                metaPb.setBookmark('');
-                metaPb.setFetchedRecordsCount(3);
-
-                const metadataBuffer = metaPb.serializeBinary();
+                const metadataBuffer = fabprotos.protos.QueryResponseMetadata.encode({
+                    bookmark: '',
+                    fetchedRecordsCount: 3
+                }).finish();
                 expect(handleGetStateByRangeStub.firstCall.args).to.deep.equal(['', 'start key', 'end key', 'dummyChannelId', 'dummyTxid', metadataBuffer]);
             });
 
@@ -779,18 +841,18 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getStateByRangeWithPagination('start key', 'end key', 3, 'a bookmark');
 
                 expect(result).to.deep.equal('some state');
                 expect(handleGetStateByRangeStub.calledOnce).to.be.true;
-
-                const metaPb = new peer.QueryResponseMetadata();
-                metaPb.setBookmark('a bookmark');
-                metaPb.setFetchedRecordsCount(3);
-
-                const metadataBuffer = metaPb.serializeBinary();
+                const metadataBuffer = fabprotos.protos.QueryResponseMetadata.encode({
+                    bookmark: 'a bookmark',
+                    fetchedRecordsCount: 3
+                }).finish();
                 expect(handleGetStateByRangeStub.firstCall.args).to.deep.equal(['', 'start key', 'end key', 'dummyChannelId', 'dummyTxid', metadataBuffer]);
             });
         });
@@ -801,7 +863,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetQueryResult: handleGetQueryResultStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getQueryResult('a query');
 
@@ -817,16 +881,18 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetQueryResult: handleGetQueryResultStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getQueryResultWithPagination('a query', 3);
 
                 expect(result).to.deep.equal('some query result');
                 expect(handleGetQueryResultStub.calledOnce).to.be.true;
                 const metadata = handleGetQueryResultStub.firstCall.args[2];
-                const decoded = peer.QueryMetadata.deserializeBinary(metadata);
-                expect(decoded.getPagesize()).to.equal(3);
-                expect(decoded.getBookmark()).to.equal('');
+                const decoded = fabprotos.protos.QueryMetadata.decode(metadata);
+                expect(decoded.pageSize).to.equal(3);
+                expect(decoded.bookmark).to.equal('');
             });
 
             it('should have default bookmark equals an empty string', async () => {
@@ -834,16 +900,18 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetQueryResult: handleGetQueryResultStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getQueryResultWithPagination('a query', 3, 'a bookmark');
 
                 expect(result).to.deep.equal('some query result');
                 expect(handleGetQueryResultStub.calledOnce).to.be.true;
                 const metadata = handleGetQueryResultStub.firstCall.args[2];
-                const decoded = peer.QueryMetadata.deserializeBinary(metadata);
-                expect(decoded.getPagesize()).to.equal(3);
-                expect(decoded.getBookmark()).to.equal('a bookmark');
+                const decoded = fabprotos.protos.QueryMetadata.decode(metadata);
+                expect(decoded.pageSize).to.equal(3);
+                expect(decoded.bookmark).to.equal('a bookmark');
             });
         });
 
@@ -853,7 +921,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetHistoryForKey: handleGetHistoryForKeyStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const result = await stub.getHistoryForKey('a key');
 
@@ -872,7 +942,9 @@ describe('Stub', () => {
 
                 stub = new Stub({
                     handleInvokeChaincode: handleInvokeChaincodeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should return handler.handleInvokeChaincode', async () => {
@@ -896,7 +968,9 @@ describe('Stub', () => {
             let stub;
 
             beforeEach(() => {
-                stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should throw an error when name is not a string', () => {
@@ -913,8 +987,8 @@ describe('Stub', () => {
 
             it ('should set an event', () => {
                 stub.setEvent('some name', Buffer.from('some payload'));
-                expect(stub.chaincodeEvent.getEventName()).to.equal('some name');
-                expect(stub.chaincodeEvent.getPayload()).to.deep.equal(Buffer.from('some payload'));
+                expect(stub.chaincodeEvent.event_name).to.equal('some name');
+                expect(stub.chaincodeEvent.payload).to.deep.equal(Buffer.from('some payload'));
             });
         });
 
@@ -927,7 +1001,9 @@ describe('Stub', () => {
                 mockValidate = sinon.stub().returns();
                 Stub.__set__('validateCompositeKeyAttribute', mockValidate);
 
-                stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             after(() => {
@@ -962,7 +1038,9 @@ describe('Stub', () => {
 
             let stub;
             beforeEach(() => {
-                stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should return object with empty values when no composite key', () => {
@@ -995,7 +1073,9 @@ describe('Stub', () => {
 
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const createCompositeKeyStub = sinon.stub(stub, 'createCompositeKey').returns('some composite key');
                 const result = await stub.getStateByPartialCompositeKey('some type', ['attr1', 'attr2']);
@@ -1020,7 +1100,9 @@ describe('Stub', () => {
             it('the default bookmark should equal an empty string', async () => {
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const createCompositeKeyStub = sinon.stub(stub, 'createCompositeKey').returns('some composite key');
                 const result = await stub.getStateByPartialCompositeKeyWithPagination('some type', ['attr1', 'attr2'], 3);
@@ -1030,15 +1112,17 @@ describe('Stub', () => {
                 expect(createCompositeKeyStub.firstCall.args).to.deep.equal(['some type', ['attr1', 'attr2']]);
                 expect(handleGetStateByRangeStub.calledOnce).to.be.true;
                 const metadata = handleGetStateByRangeStub.firstCall.args[5];
-                const decoded = peer.QueryMetadata.deserializeBinary(metadata);
-                expect(decoded.getPagesize()).to.equal(3);
-                expect(decoded.getBookmark()).to.equal('');
+                const decoded = fabprotos.protos.QueryMetadata.decode(metadata);
+                expect(decoded.pageSize).to.equal(3);
+                expect(decoded.bookmark).to.equal('');
             });
 
             it('should return getStateByRangeWithPagination with bookmark and pageSize', async () => {
                 const stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
 
                 const createCompositeKeyStub = sinon.stub(stub, 'createCompositeKey').returns('some composite key');
                 const result = await stub.getStateByPartialCompositeKeyWithPagination('some type', ['attr1', 'attr2'], 23, 'a bookmark');
@@ -1047,9 +1131,9 @@ describe('Stub', () => {
                 expect(createCompositeKeyStub.firstCall.args).to.deep.equal(['some type', ['attr1', 'attr2']]);
                 expect(handleGetStateByRangeStub.calledOnce).to.be.true;
                 const metadata = handleGetStateByRangeStub.firstCall.args[5];
-                const decoded = peer.QueryMetadata.deserializeBinary(metadata);
-                expect(decoded.getPagesize()).to.equal(23);
-                expect(decoded.getBookmark()).to.equal('a bookmark');
+                const decoded = fabprotos.protos.QueryMetadata.decode(metadata);
+                expect(decoded.pageSize).to.equal(23);
+                expect(decoded.bookmark).to.equal('a bookmark');
             });
         });
 
@@ -1061,7 +1145,9 @@ describe('Stub', () => {
                 handleGetStateStub = sinon.stub().resolves('some state');
                 stub = new Stub({
                     handleGetState: handleGetStateStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should throw an error if no arguments supplied', async () => {
@@ -1096,7 +1182,9 @@ describe('Stub', () => {
                 handleGetPrivateDataHashStub = sinon.stub().resolves('some state');
                 stub = new Stub({
                     handleGetPrivateDataHash: handleGetPrivateDataHashStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should throw an error if no arguments supplied', async () => {
@@ -1131,7 +1219,9 @@ describe('Stub', () => {
                 handlePutStateStub = sinon.stub().resolves('some state');
                 stub = new Stub({
                     handlePutState: handlePutStateStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should throw an error if no arguments supplied', async () => {
@@ -1183,7 +1273,9 @@ describe('Stub', () => {
                 handleDeleteStateStub = sinon.stub().resolves('some state');
                 stub = new Stub({
                     handleDeleteState: handleDeleteStateStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should throw an error if no arguments supplied', async () => {
@@ -1210,47 +1302,14 @@ describe('Stub', () => {
             });
         });
 
-        describe('purgePrivateData', () => {
-            let handlePurgeStateStub;
-            let stub;
-
-            beforeEach(() => {
-                handlePurgeStateStub = sinon.stub().resolves('some state');
-                stub = new Stub({
-                    handlePurgeState: handlePurgeStateStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
-            });
-
-            it ('should throw an error if no arguments supplied', async () => {
-                const result = stub.purgePrivateData();
-                await expect(result).to.eventually.be.rejectedWith(Error, 'collection must be a valid string');
-            });
-
-            it ('should throw an error if one argument supplied', async () => {
-                const result = stub.purgePrivateData('some arg');
-                await expect(result).to.eventually.be.rejectedWith(Error, 'key must be a valid string');
-            });
-
-            it ('should throw an error if collection null', async () => {
-                const result = stub.purgePrivateData(null, 'some key');
-                await expect(result).to.eventually.be.rejectedWith(Error, 'collection must be a valid string');
-            });
-
-            it ('should return handler.handlePurgeState', async () => {
-                const result = await stub.purgePrivateData('some collection', 'some key');
-
-                expect(result).to.deep.equal('some state');
-                expect(handlePurgeStateStub.calledOnce).to.be.true;
-                expect(handlePurgeStateStub.firstCall.args).to.deep.equal(['some collection', 'some key', 'dummyChannelId', 'dummyTxid']);
-            });
-        });
-
         describe('setPrivateDataValidationParameter', () => {
             it('should return handler.handlePutStateMetadata', async () => {
                 const handlePutStateMetadataStub = sinon.stub().resolves('nothing');
                 const stub = new Stub({
                     handlePutStateMetadata: handlePutStateMetadataStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
                 const ep = Buffer.from('someEndorsementPolicy');
 
                 const nothing = await stub.setPrivateDataValidationParameter('a collection', 'aKey', ep);
@@ -1265,7 +1324,9 @@ describe('Stub', () => {
                 const handleGetStateMetadataStub = sinon.stub().resolves({VALIDATION_PARAMETER: 'some metadata'});
                 const stub = new Stub({
                     handleGetStateMetadata: handleGetStateMetadataStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
                 const ep = await stub.getPrivateDataValidationParameter('a collection', 'aKey');
                 expect(ep).to.deep.equal('some metadata');
                 sinon.assert.calledOnce(handleGetStateMetadataStub);
@@ -1281,7 +1342,9 @@ describe('Stub', () => {
                 handleGetStateByRangeStub = sinon.stub().resolves('some state');
                 stub = new Stub({
                     handleGetStateByRange: handleGetStateByRangeStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should throw an error if no arguments supplied', async () => {
@@ -1327,7 +1390,9 @@ describe('Stub', () => {
             let stub;
 
             beforeEach(() => {
-                stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                stub = new Stub('dummyClient', 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should throw an error if no arguments supplied', async () => {
@@ -1374,7 +1439,9 @@ describe('Stub', () => {
                 handleGetQueryResultStub = sinon.stub().resolves('some query result');
                 stub = new Stub({
                     handleGetQueryResult: handleGetQueryResultStub
-                }, 'dummyChannelId', 'dummyTxid', chaincodeInput);
+                }, 'dummyChannelId', 'dummyTxid', {
+                    args: []
+                });
             });
 
             it ('should throw an error if no arguments supplied', async () => {

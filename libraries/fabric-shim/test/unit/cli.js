@@ -1,7 +1,15 @@
 /*
- * Copyright IBM Corp. All Rights Reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * SPDX-License-Identifier: Apache-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 /* global describe it beforeEach afterEach */
@@ -45,9 +53,7 @@ describe('fabric-chaincode-node cli', () => {
         it('should setup yargs correctly', () => {
             sandbox.stub(yargs, 'describe').returns(yargs);
             sandbox.stub(yargs, 'env').returns(yargs);
-
             require('../../cli.js');
-
             sinon.assert.calledOnce(yargs.commandDir);
             sinon.assert.calledWith(yargs.commandDir, './lib/cmds');
             sinon.assert.calledOnce(yargs.demandCommand);
@@ -62,14 +68,23 @@ describe('fabric-chaincode-node cli', () => {
 
         it('should handle resolved promise  correctly', () => {
             sandbox.stub(yargs, 'describe').returns(yargs);
-            sandbox.stub(yargs, 'env').resolves("");
+            sandbox.stub(yargs, 'env').returns({
+                argv: {
+                    thePromise: Promise.resolve()
+                }
+            });
+            delete require.cache[require.resolve('../../cli.js')];
             require('../../cli.js');
         });
 
         it('should handle rejected promise  correctly', () => {
             sandbox.stub(yargs, 'describe').returns(yargs);
-            sandbox.stub(yargs, 'env').throws("Test Failure")
-
+            sandbox.stub(yargs, 'env').returns({
+                argv: {
+                    thePromise: Promise.reject()
+                }
+            });
+            delete require.cache[require.resolve('../../cli.js')];
             require('../../cli.js');
         });
     });

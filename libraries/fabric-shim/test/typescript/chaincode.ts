@@ -188,8 +188,6 @@ class TestTS implements ChaincodeInterface {
         await putPrivData;
         const delPrivateData: Promise<void> = stub.deletePrivateData(collection, key);
         await delPrivateData;
-        const purgePrivData: Promise<void> = stub.purgePrivateData(collection, key);
-        await purgePrivData;
 
     }
 

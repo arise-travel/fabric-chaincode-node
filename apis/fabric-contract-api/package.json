@@ -1,6 +1,6 @@
 {
   "name": "fabric-contract-api",
-  "version": "2.5.0-unstable",
+  "version": "2.2.4-unstable",
   "tag": "unstable",
   "description": "A node.js implementation of Hyperledger Fabric chaincode shim, to allow endorsing peers and user-provided chaincodes to communicate with each other",
   "main": "index.js",
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "buildt": "tsc --project test/typescript",
-    "test": "nyc mocha --recursive 'test/unit/**/*.js'",
+    "test": "nyc mocha --recursive 'test/unit/**/*.js' 2>&1",
     "build": "npm run lint && npm run test:unit && npm run test:schema",
     "lint": "eslint ./lib/",
     "test:unit": "npm run test",
@@ -22,8 +22,8 @@
     "Fabric Shim"
   ],
   "engines": {
-    "node": "^16.4.0",
-    "npm": "^8.0.0"
+    "node": "^12.16.1",
+    "npm": "^6.4.1"
   },
   "license": "Apache-2.0",
   "types": "./types/index.d.ts",
@@ -46,28 +46,27 @@
     "lines": 100
   },
   "dependencies": {
-    "fabric-shim-api": "2.5.0-unstable",
-    "class-transformer": "^0.4.0",
-    "fast-safe-stringify": "^2.1.1",
+    "fabric-shim-api": "2.2.4-unstable",
+    "class-transformer": "^0.3.1",
+    "fast-safe-stringify": "^2.0.7",
     "get-params": "^0.1.2",
     "reflect-metadata": "^0.1.13",
-    "winston": "^3.7.2"
+    "winston": "^3.3.2"
   },
   "devDependencies": {
     "ajv": "^6.12.2",
     "ajv-cli": "^3.2.1",
-    "ajv-formats": "2.1.1",
-    "chai": "^4.3.4",
+    "chai": "^4.1.1",
     "chai-as-promised": "^7.1.1",
     "chai-things": "^0.2.0",
-    "eslint": "^6.6.0",
+    "eslint": "6.6.0",
     "gulp": "^4.0.2",
     "gulp-debug": "~4.0.0",
     "gulp-eslint": "~6.0.0",
-    "mocha": "9.1.3",
+    "mocha": "9.1.2",
     "nyc": "15.1.0",
-    "rewire": "6.0.0",
-    "sinon": "13.0.1",
-    "typescript": "4.4.4"
+    "rewire": "5.0.0",
+    "sinon": "7.5.0",
+    "typescript": "3.0.1"
   }
 }

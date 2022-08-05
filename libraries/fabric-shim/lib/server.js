@@ -6,11 +6,30 @@
 
 'use strict';
 
+const protoLoader = require('@grpc/proto-loader');
 const grpc = require('@grpc/grpc-js');
+const path = require('path');
 
+const fabprotos = require('../bundle');
 const {ChaincodeMessageHandler} = require('./handler');
-const {peer} = require('@hyperledger/fabric-protos');
 const logger = require('./logger').getLogger('lib/server.js');
+
+const PROTO_PATH = path.resolve(__dirname, '..', 'protos', 'peer', 'chaincode_shim.proto');
+const packageDefinition = protoLoader.loadSync(
+    PROTO_PATH,
+    {
+        keepCase: true,
+        longs: String,
+        enums: String,
+        defaults: true,
+        oneofs: true,
+        includeDirs: [
+            path.resolve(__dirname, '..', 'google-protos'),
+            path.resolve(__dirname, '..', 'protos')
+        ]
+    }
+);
+const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
 
 /**
  * The ChaincodeServer class represents a chaincode gRPC server, which waits for connections from peers.
@@ -60,7 +79,7 @@ class ChaincodeServer {
 
         // Create GRPC Server and register RPC handler
         this._server = new grpc.Server();
-        this._server.addService(peer.ChaincodeService, this);
+        this._server.addService(protoDescriptor.protos.Chaincode.service, this);
 
         this._serverOpts = serverOpts;
         this._chaincode = chaincode;
@@ -91,14 +110,14 @@ class ChaincodeServer {
 
         try {
             const client = new ChaincodeMessageHandler(stream, this._chaincode);
-
-            const msgPb = new peer.ChaincodeID();
-            msgPb.setName(this._serverOpts.ccid);
+            const chaincodeID = {
+                name: this._serverOpts.ccid
+            };
 
             logger.debug('Start chatting with a peer through a new stream. Chaincode ID = ' + this._serverOpts.ccid);
             client.chat({
-                type: peer.ChaincodeMessage.Type.REGISTER,
-                payload: msgPb.serializeBinary()
+                type: fabprotos.protos.ChaincodeMessage.Type.REGISTER,
+                payload: fabprotos.protos.ChaincodeID.encode(chaincodeID).finish()
             });
         } catch (e) {
             logger.warn('connection from peer failed: ' + e);

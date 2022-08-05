@@ -28,8 +28,8 @@ The dependencies of `fabric-contract-api` and `fabric-shim` will be required.
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "fabric-contract-api": "^2.5.0-unstable",
-    "fabric-shim": "^2.5.0-unstable"
+    "fabric-contract-api": "^2.2.4-unstable",
+    "fabric-shim": "^2.2.4-unstable"
   }
 }
 
@@ -183,7 +183,7 @@ For example
 	 *
 	 */
 	async unknownTransaction(ctx){		
-    throw new Error('a custom error message')
+        throw new Error('a custom error message')
 	}
 
 	async beforeTransaction(ctx){
@@ -193,16 +193,6 @@ For example
 	async afterTransaction(ctx,result){
 		// log result to preferred log implementation
 		// emit events etc...
-	}
-
-	async aroundTransaction(ctx, fn, parameters) {
-		try {
-      // don't forget to call super, or your transaction function won't run!
-			super.aroundTransaction(ctx, fn, parameters)
-		} catch (error) {
-			// do something with the error, then rethrow
-			throw error
-		}
 	}
 
 ```
