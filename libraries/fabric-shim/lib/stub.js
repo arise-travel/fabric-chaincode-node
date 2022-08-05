@@ -549,11 +549,11 @@ class ChaincodeStub {
         if (!startKey) {
             startKey = EMPTY_KEY_SUBSTITUTE;
         }
-        // try {
-        //     validateSimpleKeys(startKey, endKey);
-        // } catch (err) {
-        //     return Promise.reject(err);
-        // }
+        try {
+            validateSimpleKeys(startKey, endKey);
+        } catch (err) {
+            return Promise.reject(err);
+        }
         // Access public data by setting the collection to empty string
         const collection = '';
         // Need to ensure that the resolved promise returns an iterator and not an object containing an iterator property.
@@ -609,11 +609,11 @@ class ChaincodeStub {
         if (!bookmark) {
             bookmark = '';
         }
-        // try {
-        //     validateSimpleKeys(startKey, endKey);
-        // } catch (err) {
-        //     return Promise.reject(err);
-        // }
+        try {
+            validateSimpleKeys(startKey, endKey);
+        } catch (err) {
+            return Promise.reject(err);
+        }
         const collection = '';
         const metadata = createQueryMetadata(pageSize, bookmark);
         const promise = this.handler.handleGetStateByRange(collection, startKey, endKey, this.channel_id, this.txId, metadata);
