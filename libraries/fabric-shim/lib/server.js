@@ -78,7 +78,11 @@ class ChaincodeServer {
         }
 
         // Create GRPC Server and register RPC handler
-        this._server = new grpc.Server();
+        this._server = new grpc.Server({
+
+            'grpc.max_receive_message_length': 1024 * 1024 * 100,
+            'grpc.max_send_message_length': 1024 * 1024 * 100
+        });
         this._server.addService(protoDescriptor.protos.Chaincode.service, this);
 
         this._serverOpts = serverOpts;
