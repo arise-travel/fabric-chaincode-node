@@ -1,3 +1,9 @@
+/*
+ * Copyright IBM Corp. All Rights Reserved.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 const fs = require('fs');
 let filename = process.argv[2];
 let input = JSON.parse(fs.readFileSync(filename));
@@ -14,6 +20,5 @@ if (input.dependencies) {
     if (input.dependencies['fabric-ledger']) input.dependencies['fabric-ledger'] = ver;
     if (input.dependencies['fabric-shim']) input.dependencies['fabric-shim'] = ver;
     if (input.dependencies['fabric-shim-api']) input.dependencies['fabric-shim-api'] = ver;
-    if (input.dependencies['fabric-shim-crypto']) input.dependencies['fabric-shim-crypto'] = ver;
 }
 fs.writeFileSync(filename, JSON.stringify(input, null, 2));

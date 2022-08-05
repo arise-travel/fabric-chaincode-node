@@ -13,6 +13,7 @@ const logger = Logger.getLogger('contracts-spi/chaincodefromcontract.js');
 const DataMarshall = require('./datamarshall.js');
 const ClientIdentity = require('../chaincode').ClientIdentity;
 const Ajv = require('ajv');
+const Contract = require('fabric-contract-api').Contract;
 
 require('reflect-metadata');
 
@@ -85,8 +86,8 @@ class ChaincodeFromContract {
     _compileSchemas() {
 
         const schemaList = [];
-        for (const name in  this.metadata.components.schemas) {
-            const s =  this.metadata.components.schemas[name];
+        for (const name in this.metadata.components.schemas) {
+            const s = this.metadata.components.schemas[name];
 
             schemaList.push(s);
         }
@@ -153,8 +154,6 @@ class ChaincodeFromContract {
         logger.debug('Supplied contract classes', contractClasses);
         this.defaultContractName = Reflect.getMetadata('fabric:default', global);
 
-        const Contract = require('fabric-contract-api').Contract;
-
         const implementations = {};
 
         for (const contractClass of contractClasses) {
@@ -188,8 +187,6 @@ class ChaincodeFromContract {
 
         if (!metadata.contracts || Object.keys(metadata.contracts).length === 0) {
             logger.debug('_augmentMetadataFromCode - Contracts not supplied. Generating default');
-
-            const Contract = require('fabric-contract-api').Contract;
             const skipNames = Object.getOwnPropertyNames(Contract.prototype);
 
             metadata.contracts = JSON.parse(JSON.stringify(this.contractImplementations));
@@ -319,7 +316,7 @@ class ChaincodeFromContract {
      * The invokeFunctionality function is called for all the invoke operations; init is also redirected to here
      *
      * @param {ChaincodeStub} stub Stub class giving the full api
-	 * @param {Object} fAndP Function and Paramters obtained from the smart contract argument
+     * @param {Object} fAndP Function and Paramters obtained from the smart contract argument
      */
     async invokeFunctionality(stub) {
         const bufferArgs = stub.getBufferArgs();
@@ -338,6 +335,7 @@ class ChaincodeFromContract {
             const {contractName: cn, function: fn} = this._splitFunctionName(fAndP);
             logger.debug(`${loggerPrefix} Invoking ${cn} ${fn}`);
 
+
             const contractData = this.contractImplementations[cn];
             if (!contractData) {
                 throw new Error(`Contract name is not known: ${cn}`);
@@ -353,8 +351,8 @@ class ChaincodeFromContract {
             ctx.setChaincodeStub(stub);
             ctx.setClientIdentity(new ClientIdentity(stub));
             ctx.logging = {
-                setLevel : Logger.setLevel,
-                getLogger : (name) => {
+                setLevel: Logger.setLevel,
+                getLogger: (name) => {
                     return Logger.getLogger(name ? `${cn}:${name}` : cn);
                 }
             };
@@ -366,7 +364,7 @@ class ChaincodeFromContract {
 
             // if the function exists, then we can call it otherwise, call the unkownn tx handler
             if (functionExists) {
-
+                logger.debug(`${JSON.stringify(functionExists)}`);
                 // marhsall the parameters into the correct types for hanlding by
                 // the tx function
                 const parameters = dataMarshall.handleParameters(functionExists, txArgs, loggerPrefix);
@@ -385,7 +383,7 @@ class ChaincodeFromContract {
                 if (functionExists.returns) {
                     returnSchema = functionExists.returns;
                 }
-
+                logger.debug(`${JSON.stringify(result)},${returnSchema.schema}`);
                 // returnSchema can be undefined if there is no return value - the datamarshall can handle that
                 // return the data value, if any to the shim. Including converting the result to the wire format
                 return shim.success(dataMarshall.toWireBuffer(result, returnSchema.schema, loggerPrefix));
@@ -395,25 +393,25 @@ class ChaincodeFromContract {
                     await contractInstance.unknownTransaction(ctx);
                     return shim.success();
                 } catch (error) {
-                    return shim.error(error);
+                    return shim.error(error.message);
                 }
             }
 
         } catch (error) {
             // log the error and then fail the transaction
-            logger.error(`${loggerPrefix} ${error.toString()}`);
-            return shim.error(error);
+            logger.error(`${loggerPrefix} ${error}`);
+            return shim.error(error.message);
         }
     }
 
     /**
-	 * Parse the fcn name to be name and function.  These are separated by a :
-	 * Anything after the : is treated as the function name
-	 * No : implies that the whole string is a function name
-	 *
-	 * @param {String} fcn the combined function and name string
-	 * @return {Object} split into name and string
-	 */
+     * Parse the fcn name to be name and function.  These are separated by a :
+     * Anything after the : is treated as the function name
+     * No : implies that the whole string is a function name
+     *
+     * @param {String} fcn the combined function and name string
+     * @return {Object} split into name and string
+     */
     _splitFunctionName(fcn) {
         // Did consider using a split(':') call to do this; however I chose regular expression for
         // the reason that it provides definitive description.

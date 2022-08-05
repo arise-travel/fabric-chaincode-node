@@ -19,10 +19,21 @@ const ip = require('ip');
 const CHANNEL_NAME = 'mychannel';
 
 /* eslint-disable no-console */
+const dir = path.join(__dirname, '..', '..', 'fabric-samples');
+const exportPeerCommand = async(org) => {
+    const port = org === 'org1' ? 7051 : 9051;
+    const role = 'Admin';
+    const args = `export PATH=${dir}/bin:$PATH && export FABRIC_CFG_PATH=${dir}/config/ && ` +
+        `export CORE_PEER_TLS_ENABLED=true && export CORE_PEER_LOCALMSPID="${org[0].toUpperCase() + org.slice(1)}MSP" && ` +
+        `export CORE_PEER_TLS_ROOTCERT_FILE=${dir}/test-network/organizations/peerOrganizations/${org}.example.com/peers/peer0.${org}.example.com/tls/ca.crt && ` +
+        `export CORE_PEER_MSPCONFIGPATH=${dir}/test-network/organizations/peerOrganizations/${org}.example.com/users/${role}@${org}.example.com/msp && ` +
+        `export CORE_PEER_ADDRESS=localhost:${port}`;
+    return args;
+}
 
 const invokeFunctions = async () => {
-
-    const args = util.format('docker exec org1_cli peer chaincode invoke %s -C %s -n %s -c %s --waitForEvent',
+    const args = await exportPeerCommand('org1') + ' && ' + util.format(
+        'peer chaincode invoke -o localhost:7050 %s -C %s -n %s -c %s --waitForEvent',
         getTLSArgs(),
         CHANNEL_NAME,
         'mysmartcontract',
@@ -32,8 +43,8 @@ const invokeFunctions = async () => {
 };
 
 const queryFunctions = async () => {
-
-    const args = util.format('docker exec org2_cli peer chaincode query %s -C %s -n %s -c %s',
+    const args = await exportPeerCommand('org2') +  ' && ' + util.format(
+        'peer chaincode query -o localhost:7050 %s -C %s -n %s -c %s',
         getTLSArgs(),
         CHANNEL_NAME,
         'mysmartcontract',
@@ -43,11 +54,10 @@ const queryFunctions = async () => {
     const stdout = stdoutList[0];
     // validate the stdout/stderr
     console.log(stdout);
-    // console.log(stderr);
 
     const metadata = JSON.parse(stdout);
 
-    const expectedMetadata = '{"$schema":"https://hyperledger.github.io/fabric-chaincode-node/main/api/contract-schema.json","contracts":{"UpdateValues":{"name":"UpdateValues","contractInstance":{"name":"UpdateValues","logBuffer":{"output":[]},"default":true},"transactions":[{"name":"setup","tags":["SUBMIT","submitTx"]},{"name":"setNewAssetValue","tags":["SUBMIT","submitTx"],"parameters":[{"name":"arg0","description":"Argument 0","schema":{"type":"string"}}]},{"name":"doubleAssetValue","tags":["SUBMIT","submitTx"]}],"info":{"title":"","version":""}},"RemoveValues":{"name":"RemoveValues","contractInstance":{"name":"RemoveValues"},"transactions":[{"name":"quarterAssetValue","tags":["SUBMIT","submitTx"]},{"name":"getAssetValue","tags":["SUBMIT","submitTx"]}],"info":{"title":"","version":""}},"org.hyperledger.fabric":{"name":"org.hyperledger.fabric","contractInstance":{"name":"org.hyperledger.fabric"},"transactions":[{"name":"GetMetadata"}],"info":{"title":"","version":""}}},"info":{"version":"1.0.0","title":"chaincode"},"components":{"schemas":{}}}';
+    const expectedMetadata = '{"$schema":"https://hyperledger.github.io/fabric-chaincode-node/main/api/contract-schema.json","contracts":{"UpdateValues":{"name":"UpdateValues","contractInstance":{"name":"UpdateValues","logBuffer":{"output":[]},"default":true},"transactions":[{"name":"setup","tags":["SUBMIT","submitTx"]},{"name":"setNewAssetValue","tags":["SUBMIT","submitTx"],"parameters":[{"name":"arg0","description":"Argument 0","schema":{"type":"string"}}]},{"name":"doubleAssetValue","tags":["SUBMIT","submitTx"]}],"info":{"title":"","version":""}},"RemoveValues":{"name":"RemoveValues","contractInstance":{"name":"RemoveValues"},"transactions":[{"name":"quarterAssetValue","tags":["SUBMIT","submitTx"]},{"name":"getAssetValue","tags":["SUBMIT","submitTx"]}],"info":{"title":"","version":""}},"org.hyperledger.fabric":{"name":"org.hyperledger.fabric","contractInstance":{"name":"org.hyperledger.fabric"},"transactions":[{"name":"GetMetadata"}],"info":{"title":"","version":""}}},"info":{"version":"2.5.0-unstable","title":"chaincode"},"components":{"schemas":{}}}';
 
     const schema = fs.readFileSync(path.join(__dirname, '../../apis/fabric-contract-api/schema/contract-schema.json'));
 
@@ -66,66 +76,11 @@ const queryFunctions = async () => {
 
 
 const instantiateChaincode = async () => {
-    const endorsementPolicy = '"OR (\'Org1MSP.member\', \'Org2MSP.member\')"';
-    const queryInstalled = util.format(
-        'peer lifecycle chaincode queryinstalled --output json'
-    );
-    const sequence = 1;
-
-    const approveChaincode = util.format(
-        'peer lifecycle chaincode approveformyorg -o %s %s -C %s -n %s -v %s --init-required --package-id %s --sequence %d --signature-policy %s',
-        'orderer.example.com:7050',
-        getTLSArgs(),
-        CHANNEL_NAME,
-        'mysmartcontract',
-        'v0',
-        '%s', // To be filled in for each org
-        sequence,
-        endorsementPolicy
-    );
-
-    const outputs = await runcmds([
-        util.format(
-            'docker exec %s %s',
-            'org1_cli',
-            queryInstalled
-        ),
-        util.format(
-            'docker exec %s %s',
-            'org2_cli',
-            queryInstalled
-        ),
-    ]);
-
-    const packageIdOrg1 = findPackageId(outputs[0], 'mysmartcontract_v0');
-    const packageIdOrg2 = findPackageId(outputs[1], 'mysmartcontract_v0');
-
-    // Approve the chaincode and commit
-    await runcmds([
-        util.format('docker exec %s %s',
-            'org1_cli',
-            util.format(approveChaincode, packageIdOrg1)
-        ),
-        util.format('docker exec %s %s',
-            'org2_cli',
-            util.format(approveChaincode, packageIdOrg2)
-        ),
-        util.format('docker exec org1_cli peer lifecycle chaincode commit -o %s %s -C %s -n %s -v %s --init-required --sequence %d --signature-policy %s %s',
-            'orderer.example.com:7050',
-            getTLSArgs(),
-            CHANNEL_NAME,
-            'mysmartcontract',
-            'v0',
-            sequence,
-            endorsementPolicy,
-            getPeerAddresses()
-        )
-    ]);
-    await delay(3000);
-
     // Invoke init function
     await runcmds([
-        util.format('docker exec org1_cli peer chaincode invoke %s -C %s -n %s -c %s --isInit --waitForEvent',
+        await exportPeerCommand('org1') + ' && ' +
+        util.format(
+            'peer chaincode invoke -o localhost:7050 %s -C %s -n %s -c %s --waitForEvent',
             getTLSArgs(),
             CHANNEL_NAME,
             'mysmartcontract',
@@ -159,33 +114,18 @@ const installChaincode = async () => {
     );
     const npmrc = path.join(__dirname, '..', '..', 'test', 'chaincodes','scenario', '.npmrc');
 
+    const CCDir = path.join(__dirname, '..', 'chaincodes', 'scenario');
+
     await runcmds([
         `echo "registry=http://${ip.address()}:4873" > ${npmrc}`,
         util.format(
-            'docker exec %s %s',
-            'org1_cli',
-            packageChaincode
-        ),
-        util.format(
-            'docker exec %s %s',
-            'org1_cli',
-            peerInstall
-        ),
-        util.format(
-            'docker exec %s %s',
-            'org2_cli',
-            packageChaincode
-        ),
-        util.format(
-            'docker exec %s %s',
-            'org2_cli',
-            peerInstall
-        ),
-        `rm -f ${npmrc}`
+            await exportPeerCommand('org1') + ' && ',
+            `cd ${dir}/test-network && ./network.sh deployCC -ccn mysmartcontract -ccp ${CCDir} -ccl javascript -ccep "OR('Org1MSP.peer','Org2MSP.peer')"`
+        )
     ]);
 };
 
 const clientTests = series(installChaincode, instantiateChaincode, invokeFunctions, queryFunctions);
 const serverTests = require('./server').default;
 
-exports.default = series(clientTests, serverTests);
+exports.default = series(clientTests);

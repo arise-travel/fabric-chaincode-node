@@ -39,11 +39,11 @@ variables:
   - name: pipeline
     value: ci
   - name: node_version_spec
-    value: '12.16.1'
+    value: '16.4.0'
   - name: rewire_node_version_spec # see https://github.com/jhnns/rewire/issues/178
-    value: '12.15.0'
+    value: '16.4.0'
   - name: FABRIC_VERSION
-    value: 2.2
+    value: 2.5
 
 # Build on Ubuntu
 pool:
@@ -52,7 +52,7 @@ pool:
 #
 # Publish to NPM on release builds (they are the github tagged releases)
 # Publish to NPM on nightly builds when there is something to build
-# the ids will be of the format 2.3.1-unstable.{commitid}
+# the ids will be of the format 2.5.0-unstable.{commitid}
 #
 stages:
 
@@ -83,7 +83,7 @@ stages:
                 node common/scripts/install-run-rush.js rebuild
               displayName: 'Full rebuild'
             - script: |
-                npx cobertura-merge -o merged_coverage.xml shimcrypto=./libraries/fabric-shim-crypto/coverage/cobertura-coverage.xml shim=./libraries/fabric-shim/coverage/cobertura-coverage.xml contractapi=./apis/fabric-contract-api/coverage/cobertura-coverage.xml -p
+                npx cobertura-merge -o merged_coverage.xml shim=./libraries/fabric-shim/coverage/cobertura-coverage.xml contractapi=./apis/fabric-contract-api/coverage/cobertura-coverage.xml -p
               condition: or(succeeded(), failed())
             - task: PublishTestResults@2
               condition: or(succeeded(), failed())   # publish either way
@@ -147,6 +147,7 @@ stages:
                 set -ev
                 ./tools/getEdgeDocker.sh                                # essential to get main docker images of peer etc.
                 docker image load --input build/fabric-nodeenv.tar.gz         # gets the build image of nodeenv
+                docker tag hyperledger/fabric-nodeenv:latest hyperledger/fabric-nodeenv:$(FABRIC_VERSION)
                 docker images
                 node common/scripts/install-run-rush.js install
                 node common/scripts/install-run-rush.js update          # should the tests need 'building' this will need to go here
@@ -185,11 +186,6 @@ stages:
                 pathToPublish:  $(Build.ArtifactStagingDirectory)/testlogs
                 artifactName: 'Test logs'
               displayName: 'Publish test logs'
-            - task: PublishBuildArtifacts@1
-              condition: or(succeeded(), failed())   # publish either way
-              inputs:
-                pathToPublish: tools/toolchain/network/docker-compose/logs/docker.log
-                artifactName: nodeenv-docker-image
 
 
         # Job to handle the auditing of the code
@@ -215,7 +211,7 @@ stages:
                 node common/scripts/install-run-rush.js install
                 node common/scripts/install-run-rush.js start-verdaccio # script will check for the ci variable and use built images
                 mkdir -p $(Build.SourcesDirectory)/audit && cd $(Build.SourcesDirectory)/audit && npm init -y
-                npm install --registry http://localhost:4873 fabric-shim fabric-shim-crypto fabric-shim-api fabric-contract-api --save
+                npm install --registry http://localhost:4873 fabric-shim fabric-shim-api fabric-contract-api --save
                 npm audit --audit-level=moderate
               displayName: 'Run npm audit'
 
@@ -284,6 +280,7 @@ stages:
                 git commit -m "Publishing GitHub Pages"
                 git push https://$(GITHUB-PAT)@github.com/hyperledger/fabric-chaincode-node.git gh-pages
               displayName: 'Commit gh-pages changes'
+              continueOnError: true # Need to fix jsdoc publishing after release
 
     # Publish a new version, triggered by a git tag
     - stage: Publish_tag
@@ -311,7 +308,7 @@ stages:
                 workingFile: '$(Agent.TempDirectory)/.npmrc'
                 customEndpoint: 'fabric-chainode-node-npm'
             - script: |
-                find $(Pipeline.Workspace)/node-tgz/ -maxdepth 1 -type f -name 'fabric-*.tgz' -exec npm publish {} --tag unstable \;
+                find $(Pipeline.Workspace)/node-tgz/ -maxdepth 1 -type f -name 'fabric-*.tgz' -exec npm publish {} --tag beta \;
               displayName: 'npm publish'
         - job: dockerhub_publish
           steps:
@@ -367,5 +364,5 @@ stages:
                 workingFile: '$(Agent.TempDirectory)/.npmrc'
                 customEndpoint: 'fabric-chainode-node-npm'
             - script: |
-                find $(Pipeline.Workspace)/node-tgz/ -maxdepth 1 -type f -name 'fabric-*.tgz' -exec npm publish {} --tag unstable \;
+                find $(Pipeline.Workspace)/node-tgz/ -maxdepth 1 -type f -name 'fabric-*.tgz' -exec npm publish {} --tag beta \;
               displayName: 'npm publish'

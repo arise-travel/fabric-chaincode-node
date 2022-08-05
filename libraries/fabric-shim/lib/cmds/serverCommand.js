@@ -54,10 +54,10 @@ exports.builder = function (yargs) {
     return yargs;
 };
 
-exports.handler = function (argv) {
+exports.handler = async function (argv) {
     const Bootstrap = require('../contract-spi/bootstrap');
 
-    return argv.thePromise = Bootstrap.bootstrap(true);
+    await Bootstrap.bootstrap(true);
 };
 
 exports.getArgs = function (yargs) {

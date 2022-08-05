@@ -34,18 +34,13 @@ class CrossChaincode extends Contract {
     async invokeChaincode({stub}) {
         const {params} = stub.getFunctionAndParameters();
         const results = await stub.invokeChaincode('crosschaincode2', [params[0], params[1]]);
-        return results.payload.toString('utf8');
+        return results.payload.toString();
     }
 
     async invokeChaincodeError({stub}) {
-        let error;
         const {params} = stub.getFunctionAndParameters();
-        try {
-            await stub.invokeChaincode('crosschaincode2', [params[0]]);
-        } catch (err) {
-            error = err;
-        }
-        return error.message;
+        const results = await stub.invokeChaincode('crosschaincode2', [params[0]]);
+        return results;
     }
 
 }

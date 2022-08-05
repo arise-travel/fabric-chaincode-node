@@ -1,15 +1,7 @@
 /*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Copyright IBM Corp. All Rights Reserved.
  *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 /* global describe it beforeEach afterEach */
@@ -70,21 +62,13 @@ describe('fabric-chaincode-node cli', () => {
 
         it('should handle resolved promise  correctly', () => {
             sandbox.stub(yargs, 'describe').returns(yargs);
-            sandbox.stub(yargs, 'env').returns({
-                argv: {
-                    thePromise: Promise.resolve()
-                }
-            });
+            sandbox.stub(yargs, 'env').resolves("");
             require('../../cli.js');
         });
 
         it('should handle rejected promise  correctly', () => {
             sandbox.stub(yargs, 'describe').returns(yargs);
-            sandbox.stub(yargs, 'env').returns({
-                argv: {
-                    thePromise: Promise.reject()
-                }
-            });
+            sandbox.stub(yargs, 'env').throws("Test Failure")
 
             require('../../cli.js');
         });

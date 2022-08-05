@@ -8,7 +8,6 @@ The following artifacts are created as a result of releasing Fabric Chaincode No
     - [fabric-contract-api](https://www.npmjs.com/package/fabric-contract-api)
     - [fabric-shim](https://www.npmjs.com/package/fabric-shim)
     - [fabric-shim-api](https://www.npmjs.com/package/fabric-shim-api)
-    - [fabric-shim-crypto](https://www.npmjs.com/package/fabric-shim-crypto)
 
 **Note:** A docker image with a matching V.R version is required before releasing a new version of Fabric.
 
@@ -24,7 +23,13 @@ The following tasks are required before releasing:
 - Create a new release notes file
 - Update the `CHANGELOG.md` file
   
-  The `changelog.sh` script in `tools/scripts` will prepopulate the changelog but you must check and edit the file manually afterwards as required
+The `changelog.sh` script in `tools/scripts` will prepopulate the changelog but you must check and edit the file manually afterwards as required
+
+The `tools/scripts/updateversions.sh` script will update the version in all the `package.json` files.  Pass the new version as the first argument.
+
+```bash
+./tools/scripts/updateversions.sh 2.4.1
+```
 
 See the [Prepare 2.1.4 release](https://github.com/hyperledger/fabric-chaincode-node/pull/174) pull request for an example, although be careful to search for all versions in the codebase as they're easy to miss and things change!
 
