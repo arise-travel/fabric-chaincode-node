@@ -5,7 +5,7 @@
 
 */
 
-declare module 'fabric-contract-api' {
+declare module '@arise-travel/fabric-contract-api' {
     import { Logger } from 'winston';
     import { ChaincodeStub, ClientIdentity } from 'fabric-shim-api';
 

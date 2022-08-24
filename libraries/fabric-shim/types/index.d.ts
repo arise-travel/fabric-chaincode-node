@@ -4,7 +4,7 @@
  SPDX-License-Identifier: Apache-2.0
 
 */
-declare module 'fabric-shim' {
+declare module '@arise-travel/fabric-shim' {
 
     import { EventEmitter } from 'events';
     import { Logger } from 'winston';
