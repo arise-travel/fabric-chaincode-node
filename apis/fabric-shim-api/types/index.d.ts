@@ -4,7 +4,7 @@
  SPDX-License-Identifier: Apache-2.0
 
 */
-declare module 'fabric-shim-api' {
+declare module '@arise-travel/fabric-shim-api' {
     import Long = require("long");
 
     interface Timestamp {
