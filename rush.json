@@ -326,7 +326,7 @@
         // },
         //
         {
-            "packageName": "fabric-shim-api",
+            "packageName": "@arise-travel/fabric-shim-api",
             "projectFolder": "apis/fabric-shim-api",
             "reviewCategory": "apis",
             "shouldPublish": true
